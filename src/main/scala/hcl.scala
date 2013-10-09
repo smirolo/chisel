@@ -36,58 +36,6 @@ import Literal._
 import Node._
 import ChiselError._
 
-object when {
-  def execWhen(cond: Bool)(block: => Unit) {
-    conds.push(conds.top && cond);
-    block;
-    conds.pop();
-  }
-  def apply(cond: Bool)(block: => Unit): when = {
-    execWhen(cond){ block }
-    new when(cond);
-  }
-}
-
-class when (prevCond: Bool) {
-  def elsewhen (cond: Bool)(block: => Unit): when = {
-    when.execWhen(!prevCond && cond){ block }
-    new when(prevCond || cond);
-  }
-  def otherwise (block: => Unit) {
-    val cond = !prevCond
-    if (conds.length == 1) cond.canBeUsedAsDefault = true
-    when.execWhen(cond){ block }
-  }
-}
-
-object unless {
-  def apply(c: Bool)(block: => Unit) {
-    when (!c) { block }
-  }
-}
-
-object otherwise {
-  def apply(block: => Unit) {
-    when (Bool(true)) { block }
-  }
-}
-object switch {
-  def apply(c: Bits)(block: => Unit) {
-    keys.push(c);
-    block;
-    keys.pop();
-  }
-}
-object is {
-  def apply(v: Bits)(block: => Unit) {
-    if (keys.length == 0) {
-      ChiselError.error("NO KEY SPECIFIED");
-    } else {
-      val c = keys(0) === v;
-      when (c) { block; }
-    }
-  }
-}
 
 class TestIO(val format: String, val args: Seq[Data] = null)
 
@@ -262,18 +210,6 @@ trait nameable {
   /** _named_ is used to indicates name was set explicitely
    and should not be overriden by a _nameIt_ generator. */
   var named = false;
-}
-
-abstract class BlackBox extends Module {
-  Module.blackboxes += this
-
-  def setVerilogParameters(string: String) {
-    this.asInstanceOf[Module].verilog_parameters = string;
-  }
-
-  def setName(name: String) {
-    moduleName = name;
-  }
 }
 
 
