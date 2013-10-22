@@ -150,11 +150,17 @@ class VecProc extends CondAssign {
   }
 }
 
-class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable with BufferProxy[T] {
+class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
+    with Cloneable with BufferProxy[T] {
   val self = new ArrayBuffer[T]
   val readPortCache = new HashMap[UInt, T]
   var sortedElementsCache: ArrayBuffer[ArrayBuffer[Data]] = null
   var flattenedVec: Node = null
+
+  override def items(): Seq[(Int, Data)] = {
+    self.zipWithIndex.map(tuple => (tuple._2, tuple._1))
+  }
+
 
   override def apply(idx: Int): T = {
     self(idx)
@@ -261,7 +267,7 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
     assert(this.size == src.size, {
       ChiselError.error("Can't wire together Vecs of mismatched lengths")
     })
-
+/* XXX Skip for now
     // Check LHS to make sure unidirection
     val dirLHS = this.flatten(0)._2.dir
     this.flatten.map(x => {assert(x._2.dir == dirLHS, {
@@ -277,7 +283,7 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
       })
       })
     }
-
+ */
     for((me, other) <- this zip src){
       me match {
         case bundle: Bundle =>
@@ -293,12 +299,6 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
   def := (src: UInt) {
     for(i <- 0 until length)
       this(i) := src(i)
-  }
-
-  override def flip(): this.type = {
-    for(b <- self)
-      b.flip();
-    this
   }
 
   override def nameIt (path: String) {
@@ -327,22 +327,6 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
   override def clone(): this.type = {
     val res = Vec.tabulate(size)(gen);
     res.asInstanceOf[this.type]
-  }
-
-
-  override def asDirectionless(): this.type = {
-    self.foreach(_.asDirectionless)
-    this
-  }
-
-  override def asOutput(): this.type = {
-    self.foreach(_.asOutput)
-    this
-  }
-
-  override def asInput(): this.type = {
-    self.foreach(_.asInput)
-    this
   }
 
   override def toBits(): UInt = {

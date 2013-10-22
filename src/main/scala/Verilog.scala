@@ -181,41 +181,38 @@ class VerilogBackend extends Backend {
       if(n != "reset") {
         var portDec = "." + n + "( ";
         w match {
-          case io: Bits  =>
+          case io: IOBound  =>
             if (io.dir == INPUT) { // if reached, then input has consumers
-              if (io.node.inputs.length == 0) {
-                  // if(Module.saveConnectionWarnings) {
-                  //   ChiselError.warning("" + io + " UNCONNECTED IN " + io.component);
-                  // } removed this warning because pruneUnconnectedIOs should have picked it up
+              if (io.inputs.length == 0) {
                 portDec = "//" + portDec
-              } else if (io.node.inputs.length > 1) {
+              } else if (io.inputs.length > 1) {
                   if(Module.saveConnectionWarnings) {
-                    ChiselError.warning("" + io + " CONNECTED TOO MUCH " + io.node.inputs.length);
+                    ChiselError.warning("" + io + " CONNECTED TOO MUCH " + io.inputs.length);
                   }
                 portDec = "//" + portDec
-              } else if (!c.isWalked.contains(io.node)){
+              } else if (!c.isWalked.contains(io)){
                   if(Module.saveConnectionWarnings) {
                     ChiselError.warning(" UNUSED INPUT " + io + " OF " + c + " IS REMOVED");
                   }
                 portDec = "//" + portDec
               } else {
-                portDec += emitRef(io.node.inputs(0));
+                portDec += emitRef(io.inputs(0));
               }
             } else if(io.dir == OUTPUT) {
-              if (io.node.consumers.length == 0) {
+              if (io.consumers.length == 0) {
                   // if(Module.saveConnectionWarnings) {
                   //   ChiselError.warning("" + io + " UNCONNECTED IN " + io.component + " BINDING " + c.findBinding(io));
                   // } removed this warning because pruneUnconnectedsIOs should have picked it up
                 portDec = "//" + portDec
               } else {
-                var consumer: Node = c.parent.findBinding(io.node);
+                var consumer: Node = c.parent.findBinding(io);
                 if (consumer == null) {
                   if(Module.saveConnectionWarnings) {
-                    ChiselError.warning("" + io + "(" + io.component + ") OUTPUT UNCONNECTED (" + io.node.consumers.length + ") IN " + c.parent);
+                    ChiselError.warning("" + io + "(" + io.component + ") OUTPUT UNCONNECTED (" + io.consumers.length + ") IN " + c.parent);
                   }
                   portDec = "//" + portDec
                 } else {
-                  if (io.node.prune)
+                  if (io.prune)
                     portDec = "//" + portDec + emitRef(consumer)
                   else
                     portDec += emitRef(consumer); // TODO: FIX THIS?
@@ -233,10 +230,10 @@ class VerilogBackend extends Backend {
     if (c.clocks.length > 0 || c.resets.size > 0) res += ",\n" else res += "\n"
     res += portDecs.map(_.result).reduceLeft(_ + "\n" + _)
     res += "\n  );\n";
-    if (c.wires.map(_._2.node.driveRand).reduceLeft(_ || _)) {
+    if (c.wires.map(_._2.driveRand).reduceLeft(_ || _)) {
       res += "  `ifndef SYNTHESIS\n"
       for ((n, w) <- c.wires) {
-        if (w.node.driveRand) {
+        if (w.driveRand) {
           res += "    assign " + c.name + "." + n + " = $random();\n"
         }
       }
@@ -248,7 +245,7 @@ class VerilogBackend extends Backend {
   override def emitDef(node: Node): String = {
     val res = 
     node match {
-      case x: Bits =>
+      case x: IOBound =>
         if (x.isIo && x.dir == INPUT) {
           ""
         } else {
@@ -657,14 +654,14 @@ class VerilogBackend extends Backend {
     for ((n, w) <- c.wires) {
       // if(first && !hasReg) {first = false; nl = "\n"} else nl = ",\n";
       w match {
-        case io: Bits => {
-          val prune = if (io.node.prune && c != Module.topComponent) "//" else ""
+        case io: IOBound => {
+          val prune = if (io.prune && c != Module.topComponent) "//" else ""
           if (io.dir == INPUT) {
             ports += new StringBuilder(nl + "    " + prune + "input " + 
-                                       emitSigned(io.node) + emitWidth(io.node) + " " + emitRef(io.node));
+                                       emitSigned(io) + emitWidth(io) + " " + emitRef(io));
           } else if(io.dir == OUTPUT) {
             ports += new StringBuilder(nl + "    " + prune + "output" + 
-                                       emitSigned(io.node) + emitWidth(io.node) + " " + emitRef(io.node));
+                                       emitSigned(io) + emitWidth(io) + " " + emitRef(io));
           }
         }
       };

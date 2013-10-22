@@ -56,7 +56,7 @@ class FloBackend extends Backend {
         case x: Literal =>
           "" + x.value
 
-        case x: Binding =>
+        case x: IOBound =>
           emitRef(x.inputs(0))
 
         case x: Bits =>

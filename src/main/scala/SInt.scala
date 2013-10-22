@@ -37,20 +37,13 @@ object SInt {
   def apply(x: Int): SInt = SInt(Literal(x))
   def apply(x: Int, width: Int): SInt = SInt(Literal(x, width))
 
-  def apply(dir: IODirection = null, width: Int = -1): SInt = {
-    val res = new SInt();
-    res.create(dir, width)
-    res
-  }
+  def apply(dir: IODirection = null, width: Int = -1): SInt
+    = new SInt(new IOBound(dir, width))
 
-  def apply(node: Node): SInt = {
-    val res = new SInt()
-    res.node = node
-    res
-  }
+  def apply(node: Node): SInt = new SInt(node)
 }
 
-class SInt extends Bits {
+class SInt(node: Node = null) extends Bits(node) {
 
   type T = SInt;
 

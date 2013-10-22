@@ -73,7 +73,7 @@ class CppBackend extends Backend {
 
   override def emitRef(node: Node): String = {
     node match {
-      case x: Binding =>
+      case x: IOBound =>
         emitRef(x.inputs(0))
 
       case x: Bits =>
@@ -97,7 +97,7 @@ class CppBackend extends Backend {
   }
   def emitWordRef(node: Node, w: Int): String = {
     node match {
-      case x: Binding =>
+      case x: IOBound =>
         emitWordRef(x.inputs(0), w)
       case x: Bits =>
         if (!node.isInObject && node.inputs.length == 1) emitWordRef(node.inputs(0), w) else wordMangle(node, w)
@@ -108,7 +108,7 @@ class CppBackend extends Backend {
 
   override def emitDec(node: Node): String = {
     node match {
-      case x: Binding =>
+      case x: IOBound =>
         ""
       case x: Literal =>
         ""
@@ -780,19 +780,19 @@ class CppBackend extends Backend {
     var res = "";
     for ((n, w) <- c.wires) {
       w match {
-        case io: Bits  =>
+        case io: IOBound  =>
           if (io.dir == INPUT) {
             res += ("  " + emitRef(c) + "->" + n + " = "
-              + emitRef(io.node.inputs(0)) + ";\n");
+              + emitRef(io.inputs(0)) + ";\n");
           }
       };
     }
     res += emitRef(c) + "->clock_lo(reset);\n";
     for ((n, w) <- c.wires) {
       w match {
-        case io: Bits =>
+        case io: IOBound =>
           if (io.dir == OUTPUT) {
-            res += ("  " + emitRef(io.node.consumers(0)) + " = "
+            res += ("  " + emitRef(io.consumers(0)) + " = "
               + emitRef(c) + "->" + n + ";\n");
           }
       };

@@ -180,7 +180,7 @@ abstract class Backend {
     }
 
     for (bind <- root.bindings) {
-      var genName = if (bind.targetNode.name == null || bind.targetNode.name.length() == 0) "" else bind.targetComponent.name + "_" + bind.targetNode.name;
+      var genName = if (bind.target.name == null || bind.target.name.length() == 0) "" else bind.target.component.name + "_" + bind.target.name;
       if(nameSpace.contains(genName)) genName += ("_" + bind.emitIndex);
       bind.name = asValidName(genName); // Not using nameIt to avoid override
       bind.named = true;
@@ -299,7 +299,7 @@ abstract class Backend {
       as node's inputs.
       */
       val curComp = 
-        if ( node.isIo && node.asInstanceOf[Bits].dir == INPUT ) {
+        if ( node.isIo && node.asInstanceOf[IOBound].dir == INPUT ) {
           node.component.parent
         } else {
           node.component
@@ -326,8 +326,8 @@ abstract class Backend {
   }
 
   def pruneUnconnectedIOs(m: Module) {
-    val inputs = m.io.flatten.filter(_._2.dir == INPUT)
-    val outputs = m.io.flatten.filter(_._2.dir == OUTPUT)
+    val inputs = m.io.flatten.filter(x => x._2.isInstanceOf[IOBound] && x._2.asInstanceOf[IOBound].dir == INPUT)
+    val outputs = m.io.flatten.filter(x => x._2.isInstanceOf[IOBound] && x._2.asInstanceOf[IOBound].dir == OUTPUT)
 
     for ((name, i) <- inputs) {
       val node = i.node
@@ -581,7 +581,7 @@ abstract class Backend {
   def checkPorts(topC: Module) {
 
     def prettyPrint(n: Node, c: Module) {
-      val dir = if (n.asInstanceOf[Bits].dir == INPUT) "Input" else "Output"
+      val dir = if (n.asInstanceOf[IOBound].dir == INPUT) "Input" else "Output"
       val portName = n.name
       val compName = c.name
       val compInstName = c.moduleName

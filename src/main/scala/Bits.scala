@@ -34,12 +34,13 @@ import ChiselError._
 
 /* backward compatibility */
 object Bits {
-  def apply(x: Int): UInt = UInt(x);
-  def apply(x: Int, width: Int): UInt = UInt(x, width);
-  def apply(x: String): UInt = UInt(x);
-  def apply(x: String, width: Int): UInt = UInt(x, width);
+  def apply(x: Int): UInt = UInt(x)
+  def apply(x: Int, width: Int): UInt = UInt(x, width)
+  def apply(x: String): UInt = UInt(x)
+  def apply(x: String, width: Int): UInt = UInt(x, width)
 
-  def apply(dir: IODirection = null, width: Int = -1): UInt = UInt(dir, width);
+  def apply(dir: IODirection = NODIRECTION, width: Int = -1): UInt
+    = UInt(dir, width);
 }
 
 
@@ -49,14 +50,8 @@ abstract class Bits(node: Node = new CondAssign()) extends Data(node) {
   Module.ioMap += ((this, Module.ioCount));
   Module.ioCount += 1;
 
-  var dir: IODirection = null;
   /** width as inputed by the developper. */
   var width: Int = -1;
-
-  def create(dir: IODirection, width: Int) {
-    this.dir = dir;
-    this.width = width;
-  }
 
   /** Returns ``true`` when this Bits instance is bound to a ``Node``
     that generates a constant signal.
@@ -92,41 +87,29 @@ abstract class Bits(node: Node = new CondAssign()) extends Data(node) {
       "/*" + (if (name != null && !name.isEmpty) name else "?")
         + (if (component != null) (" in " + component) else "") + "*/ "
         + getClass.getName + "("
-        + (if (dir == INPUT) "INPUT, "
-        else if (dir == OUTPUT) "OUTPUT, " else "")
         + "width=" + width)
     str = str + "))"
     str
   }
 
-  override def flip(): this.type = {
-    assert(dir != null,
-      ChiselError.error("Can't flip something that doesn't have a direction"))
-    if (dir == INPUT) {
-      dir = OUTPUT
-    } else if(dir == OUTPUT) {
-      dir = INPUT
-    }
-    this
-  }
-
   override def asDirectionless(): this.type = {
-    dir = null
+    if( node != null ) node.asDirectionless()
     this
   }
 
   override def asInput(): this.type = {
-    dir = INPUT
+    if( node != null ) node.asInput()
     this
   }
 
   override def asOutput(): this.type = {
-    dir = OUTPUT
+    if( node != null ) node.asOutput()
     this
   }
 
-  override def isDirectionless: Boolean = {
-    return dir == null
+  override def flip(): this.type = {
+    if( node != null ) node.flip()
+    this
   }
 
   /* The <> operator bulk connects interfaces of opposite direction between
@@ -146,96 +129,22 @@ abstract class Bits(node: Node = new CondAssign()) extends Data(node) {
     }
   }
 
-  def <>(other: Bits) {
-    if (dir == INPUT) {
-          if (other.dir == OUTPUT) {
-            // input - output connections
-            if(this.component == other.component) {
-              // passthrough
-              other assign this.node
-            } else if (this.component.parent == other.component.parent) {
-              // producer - consumer
-              if(other.node.inputs.length > 0 ) {
-                this assign other.node // only do assignment if output has stuff connected to it
-              }
-            } else {
-              ChiselError.error({"Undefined connections between " + this + " and " + other})
-            }
-          } else if (other.dir == INPUT) {
-            // input <> input conections
-            if(this.component == other.component.parent) { // parent <> child
-              other assign this.node
-            } else if(this.component.parent == other.component) { //child <> parent
-              this assign other.node
-            } else {
-              ChiselError.error({"Can't connect Input " + this + " Input " + other})
-            }
-          } else {
-            // io <> wire
-            if(this.component == other.component) { //internal wire
-              other assign this.node
-            } else if(this.component.parent == other.component) { //external wire
-              this assign other.node
-            } else {
-              ChiselError.error({"Connecting Input " + this + " to " + other})
+  def <>(right: Bits) {
+    node match {
+      case leftBond: IOBound =>
+        right.node match {
+          case rightBond: IOBound => {
+            if(leftBond.dir == INPUT && rightBond.dir == INPUT ) {
+              leftBond.bind(rightBond)
+            } else if (leftBond.dir == INPUT && rightBond.dir == OUTPUT ) {
+              leftBond.bind(rightBond)
+            } else if (leftBond.dir == OUTPUT && rightBond.dir == INPUT ) {
+              rightBond.bind(leftBond)
+            } else if (leftBond.dir == OUTPUT && rightBond.dir == OUTPUT ) {
+              leftBond.bind(rightBond)
             }
           }
-    } else if (dir == OUTPUT) {
-          if (other.dir == INPUT) { // input - output connections
-            if (this.component == other.component ) {
-              // passthrough
-              this assign other.node;
-            } else if (this.component.parent == other.component.parent ) {
-              // producer - consumer
-              if(this.node.inputs.length > 0) {
-                // only do connection if I have stuff connected to me
-                other assign this.node;
-              }
-            } else {
-              ChiselError.error({"Undefined connection between " + this + " and " + other})
-            }
-          } else if (other.dir == OUTPUT) { // output <> output connections
-            if(this.component == other.component.parent) { // parent <> child
-              if(other.node.inputs.length > 0) {
-                // only do connection if child is assigning to that output
-                this assign other.node
-              }
-            } else if (this.component.parent == other.component) { // child <> parent
-              if(this.node.inputs.length > 0) {
-                other assign this.node // only do connection if child (me) is assinging that output
-              }
-            } else {
-              ChiselError.error({"Connecting Output " + this + " to Output " + other})
-            }
-          } else { // io <> wire
-            if(this.component == other.component) { //output <> wire
-              this assign other.node
-            } else if(this.component.parent == other.component) {
-              ChiselError.error({"Connecting Ouptut " + this + " to an external wire " + other})
-            } else {
-              ChiselError.error({"Connecting Output " + this + " to IO without direction " + other})
-            }
-          }
-    } else {
-          if (other.dir == INPUT) { // wire <> input
-            if(this.component == other.component) {
-              this assign other.node
-            } else if(this.component == other.component.parent) {
-              other assign this.node
-            } else {
-              ChiselError.error({"Undefined connection between wire " + this + " and input " + other})
-            }
-          } else if (other.dir == OUTPUT) { //wire <> output
-            if(this.component == other.component) { // internal wire
-              other assign this.node
-            } else if(this.component == other.component.parent) { // external wire
-              this assign other.node
-            } else {
-              ChiselError.error({"Undefined connection between wire " + this + " and output " + other})
-            }
-          } else {
-            this assign other.node
-          }
+        }
     }
   }
 
@@ -248,25 +157,11 @@ abstract class Bits(node: Node = new CondAssign()) extends Data(node) {
   override def clone: this.type = {
     val res = this.getClass.newInstance.asInstanceOf[this.type];
     res.width = this.width;
-    res.dir = this.dir;
     res.node = this.node;
     res
   }
 
 /*
-  override def maxNum: BigInt = {
-    if (inputs.length == 0) {
-      width;
-    } else if (inputs(0).isLit) {
-      inputs(0).value
-    } else if (inputs(0).litOf != null) {
-      inputs(0).litOf.value
-    } else if (inputs.length == 1 && inputs(0) != null) {
-      inputs(0).maxNum
-    } else {
-      super.maxNum
-    }
-  }
 
   override def forceMatchingWidths {
     if(inputs.length == 1 && inputs(0).width != width) {

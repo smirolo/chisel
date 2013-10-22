@@ -80,33 +80,33 @@ class DataSuite extends AssertionsForJUnit {
 
   @Test def testBoolFromValue() {
     val tested = Bool(true);
-    assertTrue( tested.dir == OUTPUT );
+    assertTrue( tested.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( tested.named );
   }
 
   @Test def testBoolFromDir() {
     val tested = Bool(dir = INPUT);
-    assertTrue( tested.dir == INPUT );
+    assertTrue( tested.node.asInstanceOf[IOBound].dir == INPUT );
     assertFalse( tested.named );
   }
 
   @Test def testBoolFromDefault() {
     val tested = Bool();
     /* XXX In the same situation SInt direction shows up as INPUT */
-    assertTrue( tested.dir == null );
+    assertTrue( tested.node.asInstanceOf[IOBound].dir == null );
     assertFalse( tested.named );
   }
 
   @Test def testSIntFromLit() {
     val fixFromLit = SInt(42);
 
-    assertTrue( fixFromLit.dir == OUTPUT );
+    assertTrue( fixFromLit.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( fixFromLit.named );
   }
 
   @Test def testSIntFromLitWithWidth() {
     val fixFromLitWithWidth = SInt(42, width = 16);
-    assertTrue( fixFromLitWithWidth.dir == OUTPUT );
+    assertTrue( fixFromLitWithWidth.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( fixFromLitWithWidth.named );
     /* XXX width is -1 here for some reason
     assertTrue( fixFromLitWithWidth.width == 16 );
@@ -116,7 +116,7 @@ class DataSuite extends AssertionsForJUnit {
   @Test def testSIntFromWidthDir() {
     val fixFromWidthDir = SInt(width = 8, dir = INPUT);
     assertTrue( fixFromWidthDir.width == 8 );
-    assertTrue( fixFromWidthDir.dir == INPUT );
+    assertTrue( fixFromWidthDir.node.asInstanceOf[IOBound].dir == INPUT );
     assertFalse( fixFromWidthDir.named );
   }
 
@@ -126,7 +126,7 @@ class DataSuite extends AssertionsForJUnit {
     // apply(x: Int): UInt
     val dat = UInt(5)
     assertTrue( dat.width == -1 ); // XXX ??
-    assertTrue( dat.dir == OUTPUT );
+    assertTrue( dat.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( dat.named );
   }
 
@@ -134,7 +134,7 @@ class DataSuite extends AssertionsForJUnit {
     // def apply(x: Int, width: Int): UInt
     val dat = UInt(5, 4)
     assertTrue( dat.width == -1 ); // XXX ??
-    assertTrue( dat.dir == OUTPUT );
+    assertTrue( dat.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( dat.named );
   }
 
@@ -143,7 +143,7 @@ class DataSuite extends AssertionsForJUnit {
     // def apply(x: String): UInt
     val dat = UInt("1010")
     assertTrue( dat.width == -1 ); // XXX
-    assertTrue( dat.dir == OUTPUT );
+    assertTrue( dat.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( dat.isSigned );
     assertTrue( dat.assigned );
     assertFalse( dat.named );
@@ -154,7 +154,7 @@ class DataSuite extends AssertionsForJUnit {
     // def apply(x: String, width: Int): UInt
     val dat = UInt("101", 4)
     assertTrue( dat.width == -1 ); // XXX ??
-    assertTrue( dat.dir == OUTPUT );
+    assertTrue( dat.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( dat.named );
   }
 
@@ -162,7 +162,7 @@ class DataSuite extends AssertionsForJUnit {
     // def apply(x: String, base: Char): UInt
     val dat = UInt("1010", 'b')
     assertTrue( dat.width == -1 );
-    assertTrue( dat.dir == OUTPUT );
+    assertTrue( dat.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( dat.named );
   }
 
@@ -170,7 +170,7 @@ class DataSuite extends AssertionsForJUnit {
     // def apply(x: String, base: Char): UInt
     val dat = UInt("644", 'o')
     assertTrue( dat.width == -1 );
-    assertTrue( dat.dir == OUTPUT );
+    assertTrue( dat.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( dat.named );
   }
 
@@ -179,7 +179,7 @@ class DataSuite extends AssertionsForJUnit {
     // def apply(x: String, base: Char): UInt
     val dat = UInt("199", 'd')
     assertTrue( dat.width == -1 );
-    assertTrue( dat.dir == OUTPUT );
+    assertTrue( dat.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( dat.isSigned );
     assertTrue( dat.assigned );
     assertFalse( dat.named );
@@ -190,7 +190,7 @@ class DataSuite extends AssertionsForJUnit {
     // def apply(x: String, base: Char): UInt
     val dat = UInt("abc", 'h')
     assertTrue( dat.width == -1 );
-    assertTrue( dat.dir == OUTPUT );
+    assertTrue( dat.node.asInstanceOf[IOBound].dir == OUTPUT );
     assertFalse( dat.named );
   }
 
@@ -198,7 +198,7 @@ class DataSuite extends AssertionsForJUnit {
     // def apply(dir: IODirection = null, width: Int = -1): UInt
     val dat = UInt(INPUT, 4)
     assertTrue( dat.width == 4 );
-    assertTrue( dat.dir == INPUT );
+    assertTrue( dat.node.asInstanceOf[IOBound].dir == INPUT );
     assertFalse( dat.named );
   }
 

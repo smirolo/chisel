@@ -29,43 +29,34 @@
 */
 
 package Chisel
-import Node._
 
-// used for component to component connections
-object Binding {
+/** Base class for a logical set references to ``Node``s.
 
-  def apply(m: Node, c: Module, ioComp: Module): Node = {
-    if (Module.isEmittingComponents) {
-      val res = c.findBinding(m);
-      if (res == null) {
-        val res = new Binding(m, ioComp);
-        res.component = c;
-/* XXX rewrite Binding
-        c.nodes += res
-        res.init("", widthOf(0), m);
-        res.infer;
-        c.bindings += res;
- */
-        res
-      } else {
-        res;
-      }
-    } else {
-      m
-    }
+  Each node can be individually accessed by a key of type Key,
+  which is a String for ``Bundle``s (name) and an Int for ``Vec`` (index).
+  */
+abstract class AggregateData[Key] extends Data {
+
+  def items(): Seq[(Key, Data)]
+
+  override def asDirectionless(): this.type = {
+    items().foreach(_._2.asDirectionless)
+    this
   }
-}
 
-/** Pass through binding
+  override def asInput(): this.type = {
+    items().foreach(_._2.asInput)
+    this
+  }
 
-  This kind of node is used to connect nodes accross module boundaries.
-*/
-class Binding(tn: Node, tc: Module) extends Node {
+  override def asOutput(): this.type = {
+    items().foreach(_._2.asOutput)
+    this
+  }
 
-  val targetNode: Node = tn;
-  val targetComponent: Module = tc;
+  override def flip(): this.type = {
+    items().foreach(_._2.flip())
+    this
+  }
 
-  def inferWidth(): Width = new WidthOf(0)
-
-  override def toString: String = "BINDING(" + inputs(0) + ")";
 }

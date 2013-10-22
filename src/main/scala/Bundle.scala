@@ -72,11 +72,16 @@ object sort {
 /** Defines a collection of datum of different types into a single coherent
   whole.
   */
-class Bundle(view_arg: Seq[String] = null) extends CompositeData {
-  var dir = "";
-  var view = view_arg;
+class Bundle extends AggregateData[String] {
+  var view = null;
   private var elementsCache: ArrayBuffer[(String, Data)] = null;
   var bundledElm: Node = null;
+
+
+  override def items(): Seq[(String, Data)] = {
+    elementsCache
+  }
+
 
   /** Populates the cache of elements declared in the Bundle. */
   private def calcElements(view: Seq[String]): ArrayBuffer[(String, Data)] = {
@@ -206,35 +211,22 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
     return null;
   }
 
-  override def <>(src: Data) {
-    if(dir == "output" &&
-      src.isInstanceOf[Bundle] &&
-      src.asInstanceOf[Bundle].dir == "output"){
-      src match {
-        case other: Bundle => {
-          for ((n, i) <- elements) {
-            if (other.contains(n)){
-              i <> other(n);
-            }
-            else{
-              ChiselError.warning("UNABLE TO FIND " + n + " IN " + other.component);
-            }
+  override def <>(right: Data) {
+    right match {
+      case other: Bundle => {
+        for ((n, i) <- elements) {
+          if( other.contains(n) ) {
+            i <> other(n)
+          } else {
+            ChiselError.warning("UNABLE TO FIND " + n + " IN " + other.component);
           }
         }
-        case default =>
-          ChiselError.warning("TRYING TO CONNECT BUNDLE TO NON BUNDLE " + default);
       }
-    } else {
-      src match {
-        case other: Bundle => {
-//XXX          comp assign other
-        }
-        case default =>
-          ChiselError.warning("CONNECTING INCORRECT TYPES INTO WIRE OR REG")
-      }
+      case default =>
+        ChiselError.warning("TRYING TO CONNECT BUNDLE TO NON BUNDLE " + default);
     }
-    this
   }
+
 
   override def ^^(src: Data) {
     src match {
@@ -295,26 +287,4 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
     w
   }
  */
-
-  override def asDirectionless(): this.type = {
-    elements.foreach(_._2.asDirectionless)
-    this.dir = ""
-    this
-  }
-
-  override def asInput(): this.type = {
-    elements.foreach(_._2.asInput)
-    this.dir = "input"
-    this
-  }
-
-  override def asOutput(): this.type = {
-    elements.foreach(_._2.asOutput)
-    this.dir = "output"
-    this
-  }
-
-  override def isDirectionless: Boolean = {
-    (dir == "") && elements.map{case (n,i) => i.isDirectionless}.reduce(_&&_)
-  }
 }

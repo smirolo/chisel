@@ -155,6 +155,14 @@ abstract class Node extends nameable {
     }
   }
 
+  def asDirectionless(): this.type = this
+
+  def asInput(): this.type = this
+
+  def asOutput(): this.type = this
+
+  def flip(): this.type = this
+
   private var _isIo = false
   def isIo = _isIo
   def isIo_=(isIo: Boolean) = _isIo = isIo
@@ -210,111 +218,9 @@ abstract class Node extends nameable {
     }
   }
 
-  def traceNode(c: Module, stack: Stack[() => Any]): Any = {
-    // determine whether or not the component needs a clock input
-    if ((isReg || isClkInput) && !(component == null)) {
-      component.containsReg = true
-    }
-
-    // pushes and pops components as necessary in order to later mark the parent of nodes
-    val (comp, nextComp) =
-      this match {
-        case io: Bits => {
-          if(io.isIo && (io.dir == INPUT || io.dir == OUTPUT)) {
-            (io.component, if (io.dir == OUTPUT) io.component else io.component.parent)
-          } else {
-            (c, c)
-          }
-        }
-        case any    => (c, c);
-      }
-
-    // give the components reset signal to the current node
-    // if(this.isInstanceOf[Reg]) {
-    //   val reg = this.asInstanceOf[Reg]
-    //   if(reg.isReset) reg.inputs += reg.component.reset
-    //   reg.hasResetSignal = true
-    // } obsolete now...
-
-    assert( comp != null );
-    if (comp != null && !comp.isWalked.contains(this)) {
-      comp.isWalked += this;
-      for (node <- traceableNodes) {
-        if (node != null) {
-          stack.push(() => node.traceNode(nextComp, stack));
-        }
-      }
-      var i = 0;
-      for (node <- inputs) {
-        if (node != null) {
-           //tmp fix, what happens if multiple componenets reference static nodes?
-          if (node.component == null || !Module.components.contains(node.component)) {
-            /* If Backend.collectNodesIntoComp does not resolve the component
-             field for all components, we will most likely end-up here. */
-            assert( node.component == nextComp,
-              ChiselError.error((if(node.name != null && !node.name.isEmpty)
-                node.name else "?")
-                + "[" + node.getClass.getName
-                + "] has no match between component "
-                + (if( node.component == null ) "(null)" else node.component)
-                + " and '" + nextComp + "' input of "
-                + (if(this.name != null && !this.name.isEmpty)
-                this.name else "?")))
-          }
-          if (!Module.backend.isInstanceOf[VerilogBackend] || !node.isIo) {
-            stack.push(() => node.traceNode(nextComp, stack));
-          }
-          val j = i;
-          val n = node;
-          stack.push(() => {
-            /* This code finds an output binding for a node.
-             We search for a binding only if the io is an output
-             and the logic's grandfather component is not the same
-             as the io's component and the logic's component is not
-             same as output's component unless the logic is an input */
-            n match {
-              case io: Bits =>
-                if (io.isIo && io.dir == OUTPUT && !io.isTypeNode &&
-                    (!(component.parent == io.component) &&
-                     !(component == io.component &&
-                       !(this.isInstanceOf[Bits]
-                         && this.asInstanceOf[Bits].dir == INPUT)))) {
-                  val c = n.component.parent;
-                  val b = Binding(n, c, io.component);
-                  inputs(j) = b;
-                  if (!c.isWalked.contains(b)) {
-                    c.mods += b;  c.isWalked += b;
-                  }
-                  // In this case, we are trying to use the input of a submodule
-                  // as part of the logic outside of the submodule.
-                  // If the logic is outside the submodule, we do not use
-                  // the input name. Instead, we use whatever is driving
-                  // the input. In other words, we do not use the Input name,
-                  // if the component of the logic is the part of Input's
-                  // component. We also do the same when assigning
-                  // to the output if the output is the parent
-                  // of the subcomponent.
-                } else if (io.isIo && io.dir == INPUT &&
-                           ((!this.isIo
-                             && this.component == io.component.parent)
-                             || (this.isInstanceOf[Bits]
-                               && this.asInstanceOf[Bits].dir == OUTPUT &&
-                               this.component == io.component.parent))) {
-                  if (io.inputs.length > 0) inputs(j) = io.inputs(0);
-                }
-              case any =>
-            };
-          });
-        }
-        i += 1;
-      }
-      comp.mods += this;
-    }
-  }
-
+/* XXX
   def forceMatchingWidths { }
 
-/* XXX
   def matchWidth(w: Int): Node = {
     if (w > this.width) {
       val topBit = if (isSigned) NodeExtract(this, this.width-1) else Literal(0,1)
@@ -379,6 +285,7 @@ abstract class Node extends nameable {
     }
   }
 
+/** XXX good idea. deprecated?
   def extract (widths: Array[Int]): List[UInt] = {
     var res: List[UInt] = Nil;
     var off = 0;
@@ -401,6 +308,7 @@ abstract class Node extends nameable {
     }
     res.reverse
   }
+  */
 
   def maybeFlatten: Seq[Node] = {
     this match {

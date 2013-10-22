@@ -39,15 +39,12 @@ object Bool {
 
   def apply(x: Boolean): Bool = Bool(Literal(if(x) 1 else 0, 1))
 
-  def apply(dir: IODirection = null): Bool = {
-    val res = new Bool()
-    res.dir = dir
-    res.width = 1
-    res
-  }
+  def apply(dir: IODirection = NODIRECTION): Bool
+    = new Bool(new IOBound(dir, 1))
 }
 
-class Bool extends UInt {
+
+class Bool(node: Node = null) extends UInt(node) {
 
   def :=(src: Bool): Unit = {
     this procAssign src.node

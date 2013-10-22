@@ -90,31 +90,47 @@ abstract class Data(var node: Node = null) extends nameable {
 
   def flatten: Array[(String, Bits)] = Array[(String, Bits)]();
 
-  /** Flips the direction (*dir*) of instances derived from INPUT
-    to OUTPUT or OUTPUT to INPUT respectively for Bits
-    and recursively for Bundle/VecT.
+  /** Sets the direction of all ``IOBound`` nodes referenced
+    by this ``Data`` to ``NODIRECTION``.
 
-    Returns this instance with its exact type.
+    For single node reference like ``Bits``, this means if the actual
+    node is an IOBound, that node will be modified. For aggregate node
+    references like ``Bundle`` and ``Vec``, this method applies to all
+    ``IOBound`` nodes aggregated by the reference.
     */
-  def flip(): this.type = this;
+  def asDirectionless(): this.type
 
-  /** Sets the direction (*dir*) of instances derived from Bits to INPUT
-    or recursively sets members of Bundle/Vec to INPUT.
+  /** Sets the direction of all ``IOBound`` nodes referenced
+    by this ``Data`` to ``INPUT``.
 
-    Returns this instance with its exact type.
+    For single node reference like ``Bits``, this means if the actual
+    node is an IOBound, that node will be modified. For aggregate node
+    references like ``Bundle`` and ``Vec``, this method applies to all
+    ``IOBound`` nodes aggregated by the reference.
     */
-  def asInput(): this.type = this;
+  def asInput(): this.type
 
-  /** Sets the direction (*dir*) of instances derived from Bits to OUTPUT
-    or recursively sets members of Bundle/Vec to OUTPUT.
+  /** Sets the direction of all ``IOBound`` nodes referenced
+    by this ``Data`` to ``OUTPUT``.
 
-    Returns this instance with its exact type.
+    For single node reference like ``Bits``, this means if the actual
+    node is an IOBound, that node will be modified. For aggregate node
+    references like ``Bundle`` and ``Vec``, this method applies to all
+    ``IOBound`` nodes aggregated by the reference.
     */
   def asOutput(): this.type
 
-  def asDirectionless(): this.type
+  /** Flips the direction of all ``IOBound`` nodes referenced
+    by this ``Data`` from ``INPUT`` to ``OUTPUT`` and ``OUTPUT``
+    to ``INPUT`` respectively. Nodes with no direction are left
+    unchanged.
 
-  def isDirectionless: Boolean = true;
+    For single node reference like ``Bits``, this means if the actual
+    node is an IOBound, that node will be modified. For aggregate node
+    references like ``Bundle`` and ``Vec``, this method applies to all
+    ``IOBound`` nodes aggregated by the reference.
+    */
+  def flip(): this.type
 
   def procAssign(src: Node): Unit = {
     if(this.getClass != src.getClass) {
@@ -154,5 +170,3 @@ abstract class Data(var node: Node = null) extends nameable {
   def <>(src: Data): Unit = {}
 }
 
-abstract class CompositeData extends Data {
-}

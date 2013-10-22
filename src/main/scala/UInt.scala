@@ -43,19 +43,13 @@ object UInt {
   def apply(x: String): UInt = UInt(Literal(x, -1))
   def apply(x: String, width: Int): UInt = UInt(Literal(x, width))
   def apply(x: String, base: Char): UInt = UInt(Literal(x, base, -1))
-  def apply(x: String, base: Char, width: Int): UInt = UInt(Literal(x, base, width))
+  def apply(x: String, base: Char, width: Int): UInt
+    = UInt(Literal(x, base, width))
 
-  def apply(dir: IODirection = null, width: Int = -1): UInt = {
-    val res = new UInt();
-    res.create(dir, width)
-    res
-  }
+  def apply(dir: IODirection = NODIRECTION, width: Int = -1): UInt
+    = new UInt(new IOBound(dir, width))
 
-  def apply(node: Node): UInt = {
-    val res = new UInt()
-    res.node = node
-    res
-  }
+  def apply(node: Node): UInt = new UInt(node)
 }
 
 
