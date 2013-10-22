@@ -87,7 +87,7 @@ abstract class Backend {
     root.io.nameIt("io");
     val nameSpace = new HashSet[String];
     /* We are going through all declarations, which can return Nodes,
-     ArrayBuffer[Node], Cell, BlackBox and Modules.
+     ArrayBuffer[Node], BlackBox and Modules.
      Since we call invoke() to get a proper instance of the correct type,
      we have to insure the method is accessible, thus all fields
      that will generate C++ or Verilog code must be made public. */
@@ -128,11 +128,6 @@ abstract class Backend {
                i += 1;
              }
            }
-         }
-         case cell: Cell => {
-           cell.name = asValidName(name);
-           cell.named = true;
-           nameSpace += cell.name;
          }
          case bb: BlackBox => {
            if(!bb.named) {
@@ -265,7 +260,7 @@ abstract class Backend {
         res.push(a)
       }
       for((n, flat) <- c.io.flatten) {
-        res.push(flat)
+        res.push(flat.node)
       }
     }
     res
@@ -335,30 +330,32 @@ abstract class Backend {
     val outputs = m.io.flatten.filter(_._2.dir == OUTPUT)
 
     for ((name, i) <- inputs) {
-      if (i.inputs.length == 0 && m != Module.topComponent)
-        if (i.consumers.length > 0) {
+      val node = i.node
+      if (node.inputs.length == 0 && m != Module.topComponent)
+        if (node.consumers.length > 0) {
           if (Module.warnInputs)
-            ChiselError.warning({"UNCONNECTED INPUT " + emitRef(i) + " in COMPONENT " + i.component +
+            ChiselError.warning({"UNCONNECTED INPUT " + emitRef(node) + " in COMPONENT " + node.component +
                                  " has consumers"})
-          i.driveRand = true
+          node.driveRand = true
         } else {
           if (Module.warnInputs)
-            ChiselError.warning({"FLOATING INPUT " + emitRef(i) + " in COMPONENT " + i.component})
-          i.prune = true
+            ChiselError.warning({"FLOATING INPUT " + emitRef(node) + " in COMPONENT " + node.component})
+          node.prune = true
         }
     }
 
     for ((name, o) <- outputs) {
-      if (o.inputs.length == 0) {
-        if (o.consumers.length > 0) {
+      val node = o.node
+      if (node.inputs.length == 0) {
+        if (node.consumers.length > 0) {
           if (Module.warnOutputs)
-            ChiselError.warning({"UNCONNETED OUTPUT " + emitRef(o) + " in component " + o.component + 
-                                 " has consumers on line " + o.consumers(0).line})
-          o.driveRand = true
+            ChiselError.warning({"UNCONNETED OUTPUT " + emitRef(node) + " in component " + node.component + 
+                                 " has consumers on line " + node.consumers(0).line})
+          node.driveRand = true
         } else {
           if (Module.warnOutputs)
-            ChiselError.warning({"FLOATING OUTPUT " + emitRef(o) + " in component " + o.component})
-          o.prune = true
+            ChiselError.warning({"FLOATING OUTPUT " + emitRef(node) + " in component " + node.component})
+          node.prune = true
         }
       }
     }
@@ -429,7 +426,7 @@ abstract class Backend {
           // create a reset pin in parent if reset does not originate in parent and 
           // if reset is not an output from one of parent's children
           if (reset.component != parent && !parent.children.contains(reset.component))
-            parent.addResetPin(reset)
+            parent.addResetPin(Bool(reset))
 
           // special case for implicit reset
           if (reset == Module.implicitReset && parent == Module.topComponent)
@@ -447,7 +444,7 @@ abstract class Backend {
           if (child.resets(reset).inputs.length == 0)
             if (parent.resets.contains(reset))
               child.resets(reset).inputs += parent.resets(reset)
-            else 
+            else
               child.resets(reset).inputs += reset
         }
       }
@@ -549,7 +546,6 @@ abstract class Backend {
     ChiselError.info("finished transforms")
 
     Module.sortedComps.map(_.nodes.map(_.addConsumers))
-    c.traceNodes();
     val clkDomainWalkedNodes = new ArrayBuffer[Node]
     for (comp <- Module.sortedComps)
       for (node <- comp.nodes)
@@ -596,8 +592,9 @@ abstract class Backend {
     for (c <- Module.components) {
       if (c != topC) {
         for ((n,i) <- c.io.flatten) {
-          if (i.inputs.length == 0) {
-            prettyPrint(i, c)
+          val node = i.node
+          if (node.inputs.length == 0) {
+            prettyPrint(node, c)
           }
         }
       }

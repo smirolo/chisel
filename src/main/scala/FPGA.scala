@@ -65,10 +65,10 @@ class FPGABackend extends VerilogBackend
 
       case m: MemWrite =>
         // check if byte-wide write enable can be used
-        def litOK(x: Node) = x.isLit && (0 until x.width).forall(i => x.litOf.value.testBit(i) == x.litOf.value.testBit(i/8*8))
-        def extractOK(x: Node) = x.isInstanceOf[Extract] && x.inputs.length == 3 && x.inputs(2).isLit && x.inputs(2).litOf.value % 8 == 0 && x.inputs(1).isLit && (x.inputs(1).litOf.value + 1) % 8 == 0 && useByteMask(x.inputs(0))
-        def fillOK(x: Node) = x.isInstanceOf[Fill] && (x.inputs(1).litOf.value % 8 == 0 && x.inputs(0).width == 1 || useByteMask(x.inputs(0)))
-        def catOK(x: Node) = x.isInstanceOf[Cat] && x.inputs.forall(i => useByteMask(i))
+        def litOK(x: Node) = x.isInstanceOf[Literal] && (0 until x.width).forall(i => x.asInstanceOf[Literal].value.testBit(i) == x.asInstanceOf[Literal].value.testBit(i/8*8))
+        def extractOK(x: Node) = x.isInstanceOf[ExtractOp] && x.inputs.length == 3 && x.inputs(2).isInstanceOf[Literal] && x.inputs(2).asInstanceOf[Literal].value % 8 == 0 && x.inputs(1).isInstanceOf[Literal] && (x.inputs(1).asInstanceOf[Literal].value + 1) % 8 == 0 && useByteMask(x.inputs(0))
+        def fillOK(x: Node) = x.isInstanceOf[FillOp] && (x.inputs(1).asInstanceOf[Literal].value % 8 == 0 && x.inputs(0).width == 1 || useByteMask(x.inputs(0)))
+        def catOK(x: Node) = x.isInstanceOf[CatOp] && x.inputs.forall(i => useByteMask(i))
         def useByteMask(x: Node): Boolean = extractOK(x) || litOK(x) || fillOK(x) || catOK(x) || x.isInstanceOf[Bits] && x.inputs.length == 1 && useByteMask(x.inputs(0))
 
         val me = writen(m)

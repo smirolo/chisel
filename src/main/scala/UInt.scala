@@ -38,68 +38,66 @@ object UInt {
    methods to create UInt from litterals (with implicit and explicit
    widths) and reserve the default parameters for the "direction" method.
    */
-  def apply(x: Int): UInt = Lit(x){UInt()};
-  def apply(x: Int, width: Int): UInt = Lit(x, width){UInt()};
-  def apply(x: String): UInt = Lit(x, -1){UInt()};
-  def apply(x: String, width: Int): UInt = Lit(x, width){UInt()};
-  def apply(x: String, base: Char): UInt = Lit(x, base, -1){UInt()};
-  def apply(x: String, base: Char, width: Int): UInt = Lit(x, base, width){UInt()};
+  def apply(x: Int): UInt = UInt(Literal(x))
+  def apply(x: Int, width: Int): UInt = UInt(Literal(x, width))
+  def apply(x: String): UInt = UInt(Literal(x, -1))
+  def apply(x: String, width: Int): UInt = UInt(Literal(x, width))
+  def apply(x: String, base: Char): UInt = UInt(Literal(x, base, -1))
+  def apply(x: String, base: Char, width: Int): UInt = UInt(Literal(x, base, width))
 
   def apply(dir: IODirection = null, width: Int = -1): UInt = {
     val res = new UInt();
     res.create(dir, width)
     res
   }
+
+  def apply(node: Node): UInt = {
+    val res = new UInt()
+    res.node = node
+    res
+  }
 }
 
 
-class UInt extends Bits /* with Numeric[UInt] */ {
+class UInt(node: Node = null) extends Bits(node) /* with Numeric[UInt] */ {
   type T = UInt;
 
-  /** Factory method to create and assign a *UInt* type to a Node *n*.
-    */
-  override def fromNode(n: Node): this.type = {
-    UInt(OUTPUT).asTypeFor(n).asInstanceOf[this.type]
+  def toBool(): Bool = {
+    Bool(this.node)
   }
-
-  override def fromInt(x: Int): this.type = {
-    UInt(x).asInstanceOf[this.type]
-  }
-
-  // to support implicit convestions
-  def ===(b: UInt): Bool = LogicalOp(this, b, "===")
 
   def :=(src: UInt) {
-    if(comp != null) {
-      comp procAssign src.toNode;
-    } else {
-      this procAssign src.toNode;
-    }
+    this procAssign src.node;
   }
 
+  // unary operators
+  def zext: UInt = UInt(0, 1) ## this
+  def unary_-(): SInt = SignRev(this.zext)
+  def unary_!(): Bool = LogicalNeg(this)
+
   // arithmetic operators
-  def zext(): SInt = Cat(UInt(0,1), this).toSInt
-  def unary_-(): UInt = newUnaryOp("-");
-  def unary_!(): Bool = Bool(OUTPUT).fromNode(UnaryOp(this, "!"));
-  def << (b: UInt): UInt = newBinaryOp(b, "<<");
-  def >> (b: UInt): UInt = newBinaryOp(b, ">>");
-  def +  (b: UInt): UInt = newBinaryOp(b, "+");
-  def *  (b: UInt): UInt = newBinaryOp(b, "*");
-  def /  (b: UInt): UInt = newBinaryOp(b, "/");
-  def %  (b: UInt): UInt = newBinaryOp(b, "%");
-  def ?  (b: UInt): UInt = newBinaryOp(b, "?");
-  def -  (b: UInt): UInt = newBinaryOp(b, "-");
+
+  def << (right: UInt): UInt = LeftShiftOp(this, right)
+  def >> (right: UInt): UInt = RightShift(this, right)
+
+// XXX deprecated?  def ?  (b: UInt): UInt = newBinaryOp(b, "?");
+
+  def + (right: UInt): UInt = AddOp(this, right)
+  def -  (right: UInt): UInt = SubOp(this, right)
+  def * (right: UInt): UInt = MulOp(this, right)
+  def % (right: UInt): UInt = Rem(this, right)
+  def / (right: UInt): UInt = Div(this, right)
 
   // order operators
-  def >  (b: UInt): Bool = newLogicalOp(b, ">");
-  def <  (b: UInt): Bool = newLogicalOp(b, "<");
-  def <= (b: UInt): Bool = newLogicalOp(b, "<=");
-  def >= (b: UInt): Bool = newLogicalOp(b, ">=");
+  def >  (right: UInt): Bool = GtrOp(this, right)
+  def <  (right: UInt): Bool = LtnOp(this, right)
+  def <= (right: UInt): Bool = LteOp(this, right)
+  def >= (right: UInt): Bool = GteOp(this, right)
 
   //UInt op SInt arithmetic
-  def +   (b: SInt): SInt = SInt(OUTPUT).fromNode(BinaryOp(this.zext, b, "+"));
-  def -   (b: SInt): SInt = SInt(OUTPUT).fromNode(BinaryOp(this.zext, b, "-"));
-  def *   (b: SInt): SInt = SInt(OUTPUT).fromNode(BinaryOp(this.zext, b, "u*s"));
-  def %   (b: SInt): SInt = SInt(OUTPUT).fromNode(BinaryOp(this.zext, b, "u%s"));
-  def /   (b: SInt): SInt = SInt(OUTPUT).fromNode(BinaryOp(this.zext, b, "u/s"));
+  def + (right: SInt): SInt = AddOp(SInt(this.zext.node), right)
+  def - (right: SInt): SInt = SubOp(SInt(this.zext.node), right)
+  def * (right: SInt): SInt = MulSU(right, this.zext)
+  def % (right: SInt): SInt = RemUS(this.zext, right)
+  def / (right: SInt): SInt = DivUS(this.zext, right)
 }

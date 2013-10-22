@@ -35,14 +35,19 @@ import scala.collection.mutable.ArrayBuffer
 import Node._
 import ChiselError._
 
-class Assert(condArg: Bool, val message: String) extends Node {
+class Assert(condArg: Node, val message: String) extends Node {
   inputs += condArg;
   def cond: Node = inputs(0);
+
+  def inferWidth(): Width = new FixedWidth(1)
 }
 
-class BitsInObject(x: Node) extends UInt {
+
+class BitsInObject(x: Node) extends Node {
   inputs += x
   override def isInObject: Boolean = true
+
+  def inferWidth(): Width = new FixedWidth(1)
 }
 
 class PrintfBase(formatIn: String, argsIn: Seq[Node]) extends Node {
@@ -51,7 +56,7 @@ class PrintfBase(formatIn: String, argsIn: Seq[Node]) extends Node {
   override def isInObject: Boolean = true
 
   private var formats = ""
-  private val lengths = new HashMap[Char, (Int => Int)]
+  val lengths = new HashMap[Char, (Int => Int)]
   lengths += ('b' -> ((x: Int) => x))
   lengths += ('d' -> ((x: Int) => math.ceil(math.log(2)/math.log(10)*x).toInt))
   lengths += ('x' -> ((x: Int) => (x + 3)/4))
@@ -85,16 +90,13 @@ class PrintfBase(formatIn: String, argsIn: Seq[Node]) extends Node {
     msg
   }
 
-  inferWidth = (x: Node) => {
-    val argLength = formats.zip(inputs).map{case (a,b) => lengths(a)(b.width)}.sum
-    8*(format.length - 2*formats.length + argLength)
-  }
+  override def inferWidth(): Width = new PrintfWidth(format, formats)
 }
 
 class Sprintf(formatIn: String, argsIn: Seq[Node]) extends PrintfBase(formatIn, argsIn)
 
 class Printf(condIn: Bool, formatIn: String, argsIn: Seq[Node]) extends PrintfBase(formatIn, argsIn) {
-  inputs += condIn
+  inputs += condIn.node
   override def args: ArrayBuffer[Node] = inputs.init
   def cond: Node = inputs.last
 }

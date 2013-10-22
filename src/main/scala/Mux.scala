@@ -32,8 +32,11 @@ package Chisel
 import Node._
 import scala.math._
 
+
 object MuxLookup {
-  def apply[S <: UInt, T <: Bits] (key: S, default: T, mapping: Seq[(S, T)]): T = {
+  def apply[S <: UInt, T <: Bits](key: S, default: T, mapping: Seq[(S, T)])
+    (implicit m: Manifest[T]): T
+  = {
     var res = default;
     for ((k, v) <- mapping.reverse)
       res = Mux(key === k, v, res);
@@ -43,7 +46,8 @@ object MuxLookup {
 }
 
 object MuxCase {
-  def apply[T <: Bits] (default: T, mapping: Seq[(Bool, T)]): T = {
+  def apply[T <: Bits](default: T, mapping: Seq[(Bool, T)])
+    (implicit m: Manifest[T]): T = {
     var res = default;
     for ((t, v) <- mapping.reverse){
       res = Mux(t, v, res);
@@ -52,34 +56,52 @@ object MuxCase {
   }
 }
 
-object Multiplex{
-  def apply (t: Node, c: Node, a: Node): Node = {
-    if (Module.isFolding) {
-      if (t.litOf != null) {
-        return if (t.litOf.value == 0) a else c
-      }
-      if (c.litOf != null && a.litOf != null) {
-        if (c.litOf.value == a.litOf.value) {
-          return c
+
+object Mux {
+  def apply[T <: Data](t: Bool, c: T, a: T)(implicit m: Manifest[T]): T = {
+    val op =
+      if( t.node.isInstanceOf[Literal] ) {
+        if( t.node.asInstanceOf[Literal].value == 0 ) a.node else c.node
+      } else if( c.node.isInstanceOf[Literal] && a.node.isInstanceOf[Literal]) {
+        if (c.node.asInstanceOf[Literal].value
+          == a.node.asInstanceOf[Literal].value) {
+          c.node
+        } else if (c.node.asInstanceOf[Literal].value == 1
+          && a.asInstanceOf[Literal].value == 0) {
+          /* special case where we can use the cond itself. */
+          if(c.node.width == 1 && a.node.width == 1) {
+            t.node
+          } else {
+            new CatOp(new FillOp(Literal(0,1),
+              max(c.node.width-1, a.node.width-1)), t.node)
+          }
+        } else if (c.node.asInstanceOf[Literal].value == 0
+          && a.node.asInstanceOf[Literal].value == 1) {
+          /* special case where we can use the cond itself. */
+          if(c.node.width == 1 && a.node.width == 1) {
+            new BitwiseRevOp(t.node)
+          } else {
+            new CatOp(new FillOp(Literal(0,1),
+              max(c.node.width-1, a.node.width-1)),
+              new BitwiseRevOp(t.node))
+          }
+        } else {
+          new MuxOp(t.node, c.node, a.node)
         }
-        if (c.litOf.value == 1 && a.litOf.value == 0) {
-          if(c.litOf.width == 1 && a.litOf.width == 1) return t
-          val fill = NodeFill(max(c.litOf.width-1, a.litOf.width-1), Literal(0,1))
-          fill.infer
-          val bit = NodeExtract(t, 0)
-          bit.infer
-          val cat = Concatenate(fill, bit)
-          cat.infer
-          return cat
-        }
+      } else if (a.node.isInstanceOf[MuxOp]
+        && c.node.clearlyEquals(a.node.inputs(1))) {
+        new MuxOp(new LogicalOrOp(
+          t.node, a.node.inputs(0)), c.node, a.node.inputs(2))
+      } else {
+        new MuxOp(t.node, c.node, a.node)
       }
-      if (a.isInstanceOf[Mux] && c.clearlyEquals(a.inputs(1))) {
-        Multiplex(t.asInstanceOf[Bool] || a.inputs(0).asInstanceOf[Bool], c, a.inputs(2))
-      }
-    }
-    new Mux().init("", maxWidth _, t, c, a);
+    val result = m.erasure.newInstance.asInstanceOf[T]
+    result.node = op
+    result
   }
 }
+
+
 
 object isLessThan {
 
@@ -99,35 +121,5 @@ object isLessThan {
   def apply(x: java.lang.Class[_], y: java.lang.Class[_]): Boolean = {
     checkCommonSuperclass(x, y)
     distFromData(x) > distFromData(y)
-  }
-}
-
-object Mux {
-  def apply[T <: Data](t: Bool, c: T, a: T): T = {
-    val res = Multiplex(t, c.toNode, a.toNode)
-    if (c.isInstanceOf[UInt]) {
-      assert(a.isInstanceOf[UInt])
-      if (c.getClass == a.getClass) {
-        c.fromNode(res)
-      } else {
-        UInt(OUTPUT).fromNode(res).asInstanceOf[T]
-      }
-    } else {
-      c.fromNode(res)
-    }
-  }
-}
-
-class Mux extends Op {
-  Module.muxes += this;
-  stack = Thread.currentThread.getStackTrace;
-  op = "Mux";
-  override def toString: String =
-    inputs(0) + " ? " + inputs(1) + " : " + inputs(2)
-  def ::(a: Node): Mux = { inputs(2) = a; this }
-
-  override def forceMatchingWidths {
-    if (inputs(1).width != width) inputs(1) = inputs(1).matchWidth(width)
-    if (inputs(2).width != width) inputs(2) = inputs(2).matchWidth(width)
   }
 }

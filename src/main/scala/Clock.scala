@@ -3,12 +3,17 @@ package Chisel
 import scala.collection.mutable.ArrayBuffer
 
 class Clock(reset: Bool = Module.implicitReset) extends Node {
+  def inferWidth(): Width = new FixedWidth(1)
+
   val stateElms = new ArrayBuffer[Node]
   Module.clocks += this
   init("", 1)
 
   var srcClock: Clock = null
   var initStr = ""
+
+  def init(name: String, width: Int) {
+  }
 
   // returns a reset pin connected to reset for the component in scope
   def getReset: Bool = {

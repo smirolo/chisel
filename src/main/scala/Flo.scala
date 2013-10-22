@@ -52,7 +52,6 @@ class FloBackend extends Backend {
     emitRef(node)
 
   override def emitRef(node: Node): String = {
-    if (node.litOf == null) {
       node match {
         case x: Literal =>
           "" + x.value
@@ -66,26 +65,23 @@ class FloBackend extends Backend {
         case _ =>
           super.emitRef(node)
       }
-    } else {
-      "" + node.litOf.value
-    }
   }
 
   def emit(node: Node): String = {
     node match {
-      case x: Mux =>
+      case x: MuxOp =>
         emitDec(x) + "mux " + emitRef(x.inputs(0)) + " " + emitRef(x.inputs(1)) + " " + emitRef(x.inputs(2)) + "\n"
 
       case o: Op =>
         emitDec(o) +
         (if (o.inputs.length == 1) {
-          o.op match {
+          o.name match {
             case "~" => "not " + emitRef(node.inputs(0))
             case "-" => "neg " + emitRef(node.inputs(0))
             case "!" => "not " + emitRef(node.inputs(0))
           }
          } else {
-           o.op match {
+           o.name match {
              case "<"  => "lt/"  + node.inputs(0).width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
              case "<=" => "gt/"  + node.inputs(0).width + " " + emitRef(node.inputs(1)) + " " + emitRef(node.inputs(0))
              case ">"  => "gt/"  + node.inputs(0).width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
@@ -107,10 +103,10 @@ class FloBackend extends Backend {
            }
          }) + "\n"
 
-      case x: Extract =>
+      case x: ExtractOp =>
         emitDec(node) + "rsh/" + node.width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1)) + "\n"
 
-      case x: Fill =>
+      case x: FillOp =>
         emitDec(x) + "fill/" + node.width + " " + emitRef(node.inputs(0)) + "\n"
 
       case x: Bits =>
@@ -134,7 +130,7 @@ class FloBackend extends Backend {
       case x: Reg => // TODO: need resetData treatment
         emitDec(x) + "reg " + emitRef(x.next) + "\n"
 
-      case x: Log2 => // TODO: log2 instruction?
+      case x: Log2Op => // TODO: log2 instruction?
         emitDec(x) + "log2/" + x.width + " " + emitRef(x.inputs(0)) + "\n"
 
       case _ =>

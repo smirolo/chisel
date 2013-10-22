@@ -40,65 +40,18 @@ import ChiselError._;
 
 object Node {
   def sprintf(message: String, args: Node*): Bits = {
-    val s = Bits().fromNode(new Sprintf(message, args))
-    s.setIsTypeNode
-    s
+    UInt(new Sprintf(message, args))
   }
 
   var isCoercingArgs = true;
+
+  /** defines the Scope of conditions set through *when* calls */
   val conds = new Stack[Bool]();
   conds.push(Bool(true));
-  // XXX ??
+  def genCond(): Node = conds.top.node;
+
+  /** defines the Scope of Bits set by *switch* call and used for *is* */
   val keys  = new Stack[Bits]();
-
-  var isInGetWidth = false
-
-  def fixWidth(w: Int) = {
-    assert(w != -1, ChiselError.error("invalid width for fixWidth object"));
-    (m: Node) => {m.isFixedWidth = true; w}
-  }
-
-  def widthOf(i: Int) = { (m: Node) => {
-    try {
-      m.inputs(i).width
-    } catch {
-        case e: java.lang.IndexOutOfBoundsException => {
-          val error = new ChiselError(() => {m + " in " + m.component + " is unconnected. Ensure that is assigned."}, m.line)
-          if (!ChiselErrors.contains(error) && !isInGetWidth) {
-            ChiselErrors += error
-          }
-          -1
-        }
-    }}}
-
-  def maxWidth(m: Node): Int = {
-    var w = 0
-    for (i <- m.inputs)
-      if (!(i == null || i == m)) {
-        w = w.max(i.width)
-      }
-    w
-  }
-
-  def minWidth(m: Node): Int = m.inputs.map(_.width).min
-
-  def maxWidthPlusOne(m: Node): Int = maxWidth(m) + 1;
-
-  def sumWidth(m: Node): Int = {
-    var res = 0;
-    for (i <- m.inputs)
-      res = res + i.width;
-    res
-  }
-
-  def lshWidthOf(i: Int, n: Node): (Node) => (Int) = {
-    (m: Node) => {
-      val res = m.inputs(0).width + n.maxNum.toInt;
-      res
-    }
-  }
-
-  def rshWidthOf(i: Int, n: Node): (Node) => (Int) = { (m: Node) => m.inputs(i).width - n.minNum.toInt }
 
   /* clk is initialized in Module.initChisel */
   var clk: Node = null
@@ -124,13 +77,13 @@ abstract class Node extends nameable {
   var depth = 0;
   def componentOf: Module = if (Module.isEmittingComponents && component != null) component else Module.topComponent
   var isSigned = false;
-  var width_ = -1;
+  var width = -1;
   var index = -1;
   var isFixedWidth = false;
   val consumers = new ArrayBuffer[Node]; // mods that consume one of my outputs
   val inputs = new ArrayBuffer[Node];
   def traceableNodes: Array[Node] = Array[Node]();
-  var inferWidth: (Node) => Int = maxWidth;
+
   var nameHolder: nameable = null;
   var isClkInput = false;
   var inferCount = 0;
@@ -144,21 +97,30 @@ abstract class Node extends nameable {
   var driveRand = false
   var clock: Clock = null
 
+  var canBeUsedAsDefault = false
+
   Module.nodes += this
 
   def setIsSigned {
     isSigned = true
   }
 
-  def isByValue: Boolean = true;
-  def width: Int = if(isInGetWidth) inferWidth(this) else width_;
-
-  /** Sets the width of a Node. */
-  def width_=(w: Int) {
-    isFixedWidth = true;
-    width_ = width;
-    inferWidth = fixWidth(w);
+  /* Returns true is this node is bound to an 'always true' variable
+   and false otherwise. */
+  def boundToTrue: Boolean = {
+    if(this.inputs.length == 0) {
+      false
+    } else {
+      this.inputs(0) match {
+        case l: Literal => l.value == 1
+        case any       => false
+      }
+    }
   }
+
+  def inferWidth(): Width
+
+  def isByValue: Boolean = true;
 
   def nameIt (path: String) {
     if( !named ) {
@@ -168,39 +130,22 @@ abstract class Node extends nameable {
     }
   }
 
-  // TODO: REMOVE WHEN LOWEST DATA TYPE IS BITS
-  def ##(b: Node): Node  = Op("##", 2, sumWidth _,  this, b );
-  def maxNum: BigInt = if(litOf != null) litOf.value else ((1 << (if(width < 0) inferWidth(this) else width))-1);
-  def minNum: BigInt = BigInt(0);
-  // TODO: SHOULD BE GENERALIZED TO DIG FOR LIT AS litOf DOES
-  def isLit: Boolean = false;
   def clearlyEquals(x: Node): Boolean = this == x
+
+/*
   // TODO: SHOULD AGREE WITH isLit
-  def litOf: Literal = {
-    if(inputs.length == 0) {
-      if (isLit) this.asInstanceOf[Literal] else null
-    } else if(inputs.length == 1
-      && isInstanceOf[Bits] && inputs(0) != null) {
-      inputs(0).litOf
-    } else {
-      null
-    }
-  }
-  def litValue(default: BigInt = BigInt(-1)): BigInt = {
-    val lit = litOf
-    if (lit == null) default else lit.value
-  }
-  def value: BigInt = BigInt(-1);
   def signed: this.type = {
     val res = SInt()
     res := this.asInstanceOf[SInt];
     res.isSigned = true;
     res.asInstanceOf[this.type]
   }
+
   def bitSet(off: UInt, dat: UInt): UInt = {
     val bit = UInt(1, 1) << off;
     (this.asInstanceOf[UInt] & ~bit) | (dat << off);
   }
+*/
   // TODO: MOVE TO WIRE
   def assign(src: Node) {
     if (inputs.length > 0) {
@@ -209,13 +154,7 @@ abstract class Node extends nameable {
       inputs += src;
     }
   }
-  def <>(src: Node) {
-    this assign src
-  }
-  def ^^(src: Node) {
-    src assign this;
-  }
-  def getLit: Literal = this.asInstanceOf[Literal]
+
   private var _isIo = false
   def isIo = _isIo
   def isIo_=(isIo: Boolean) = _isIo = isIo
@@ -228,43 +167,7 @@ abstract class Node extends nameable {
     return false;
   }
   def isRamWriteInput(i: Node): Boolean = false;
-  def initOf (n: String, width: (Node) => Int, ins: List[Node]): Node = {
-    name = n;
-    inferWidth = width;
-    for (i <- ins)
-      inputs += i;
-    this
-  }
-  def init (n: String, width: (Node) => Int, ins: Node*): Node = {
-    initOf(n, width, ins.toList);
-  }
-  def init (n: String, w: Int, ins: Node*): Node = {
-    isFixedWidth = true;
-    width_ = w;
-    initOf(n, fixWidth(w), ins.toList)
-  }
-  def infer: Boolean = {
-    val res = inferWidth(this);
-    if(inferCount > 1000000) {
-      if(genError) {
-        val error = new ChiselError(() => {"Unable to infer width of " + this}, this.line);
-        if (!ChiselErrors.contains(error)) {
-          ChiselErrors += error
-        }
-      } else {
-        genError = true;
-      }
-      return false;
-    }
-    if(res == -1) {
-      return true
-    } else if (res != width) {
-      width_ = res;
-      return true;
-    } else{
-      return false;
-    }
-  }
+
   def isInObject: Boolean =
     (isIo && (Module.isIoDebug || component == Module.topComponent)) ||
     Module.topComponent.debugs.contains(this) ||
@@ -278,28 +181,14 @@ abstract class Node extends nameable {
   def printTree(writer: PrintStream, depth: Int = 4, indent: String = ""): Unit = {
     if (depth < 1) return;
     writer.println(indent + getClass + " width=" + getWidth + " #inputs=" + inputs.length);
-    this match {
-      case fix: SInt => {
-        if (!(fix.comp == null)) {
-          writer.println(indent + "  (has comp " + fix.comp + " of type " + fix.comp.getClass + ")");
-        }
-      }
-      case bits: UInt => {
-        if (!(bits.comp == null)) {
-          writer.println(indent + "(has comp " + bits.comp + ")");
-        }
-      }
-      case any =>
-    }
     writer.println("sccIndex: " + sccIndex)
     writer.println("sccLowlink: " + sccLowlink)
     writer.println("walked: " + walked)
     writer.println("component: " + component)
     writer.println("flattened: " + flattened)
-    writer.println("isTypeNode: " + isTypeNode)
     writer.println("depth: " + depth)
     writer.println("isSigned: " + isSigned)
-    writer.println("width_: " + width_)
+    writer.println("width: " + width)
     writer.println("index: " + index)
     writer.println("isFixedWidth: " + isFixedWidth)
     writer.println("consumers.length: " + consumers.length)
@@ -425,12 +314,13 @@ abstract class Node extends nameable {
 
   def forceMatchingWidths { }
 
+/* XXX
   def matchWidth(w: Int): Node = {
     if (w > this.width) {
       val topBit = if (isSigned) NodeExtract(this, this.width-1) else Literal(0,1)
       topBit.infer
       val fill = NodeFill(w - this.width, topBit); fill.infer
-      val res = Concatenate(fill, this); res.infer
+      val res = CatOp(fill, this); res.infer
       res
     } else if (w < this.width) {
       val res = NodeExtract(this, w-1,0); res.infer
@@ -439,6 +329,7 @@ abstract class Node extends nameable {
       this
     }
   }
+ */
 
   def setName(n: String) {
     name = n
@@ -450,9 +341,9 @@ abstract class Node extends nameable {
   var isWidthWalked = false;
 
   def getWidth(): Int = {
-    isInGetWidth = true
     val w = width
-    isInGetWidth = false
+    // XXX infer width at this point.
+    throw new Exception("getWidth")
     w
   }
 
@@ -492,28 +383,30 @@ abstract class Node extends nameable {
     var res: List[UInt] = Nil;
     var off = 0;
     for (w <- widths) {
-      res  = this.asInstanceOf[UInt](off + w - 1, off) :: res;
+      res  = UInt(this)(off + w - 1, off) :: res;
       off += w;
     }
     res.reverse
   }
+
   def extract (b: Bundle): List[Node] = {
     var res: List[Node] = Nil;
     var off = 0;
     for ((n, io) <- b.flatten) {
       if (io.dir == OUTPUT) {
         val w = io.width;
-        res  = NodeExtract(this,off + w - 1, off) :: res;
+        res  = Extract(UInt(this), UInt(off + w - 1), UInt(off)).node :: res;
         off += w;
       }
     }
     res.reverse
   }
+
   def maybeFlatten: Seq[Node] = {
     this match {
       case b: Bundle =>
         val buf = ArrayBuffer[Node]();
-        for ((n, e) <- b.flatten) buf += e.getNode;
+        for ((n, e) <- b.flatten) buf += e.node;
         buf
       case o        =>
         Array[Node](getNode);
@@ -524,6 +417,19 @@ abstract class Node extends nameable {
       index = componentOf.nextIndex;
     }
     index
+  }
+
+
+  override def toString(): String = {
+    var str = "connect to " + inputs.length + " inputs: ("
+    var sep = ""
+    for( i <- inputs ) {
+      str = (str + sep + (if (i.name != null) i.name else "?")
+        + "[" + i.getClass.getName + "]"
+        + " in " + (if (i.component != null) i.component.getClass.getName else "?"))
+      sep = ", "
+    }
+    str
   }
 
 }

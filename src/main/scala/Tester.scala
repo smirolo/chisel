@@ -78,7 +78,7 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
     }
     for (n <- testInputNodes) {
       val v = svars.getOrElse(n, null)
-      val i = if (v == null) BigInt(0) else v.litValue() // TODO: WARN
+      val i = if (v == null) BigInt(0) else v.asInstanceOf[Literal].value // TODO: WARN
       val s = i.toString(16)
       if (isTrace) println("  " + n + " = " + i)
       for (c <- s) {
@@ -116,7 +116,7 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
       if (!svars.contains(o)) {
         ovars(o) = Literal(rv)
       } else {
-        val tv = svars(o).litValue()
+        val tv = svars(o).asInstanceOf[Literal].value
         if (isTrace) println("  EXPECTED: " + o + " = " + tv)
         if (tv != rv) {
           isSame = false

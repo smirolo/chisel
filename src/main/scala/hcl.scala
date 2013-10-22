@@ -129,14 +129,14 @@ object chiselMain {
       val c = gen();
       if (scanner != null) {
         val s = scanner(c);
-        Module.scanArgs  ++= s.args;
-        for (a <- s.args) a.isScanArg = true
+        Module.scanArgs  ++= s.args.map{ _.node };
+        for (a <- s.args) a.node.isScanArg = true
         Module.scanFormat  = s.format;
       }
       if (printer != null) {
         val p = printer(c);
-        Module.printArgs   ++= p.args;
-        for(a <- p.args) a.isPrintArg = true
+        Module.printArgs   ++= p.args.map{ _.node };
+        for(a <- p.args) a.node.isPrintArg = true
         Module.printFormat   = p.format;
       }
       if (ftester != null) {
@@ -169,42 +169,6 @@ object chiselMainTest {
     chiselMain(args, gen, null, null, tester)
 }
 
-trait proc extends Node {
-  var updates = new collection.mutable.ListBuffer[(Bool, Node)];
-  var updated = false
-  def genCond(): Bool = conds.top;
-  def genMuxes(default: Node, others: Seq[(Bool, Node)]): Unit = {
-    val update = others.foldLeft(default)((v, u) => Multiplex(u._1, u._2, v))
-    if (inputs.isEmpty) inputs += update else inputs(0) = update
-  }
-  def genMuxes(default: Node): Unit = {
-    if (updates.length == 0) {
-      if (inputs.length == 0 || inputs(0) == null) {
-        ChiselError.error({"NO UPDATES ON " + this}, this.line)
-      }
-      return
-    }
-    val (topCond, topValue) = updates.head
-    val (lastCond, lastValue) = updates.last
-    if (default == null && !topCond.isTrue && !lastCond.canBeUsedAsDefault) {
-      ChiselError.error(
-        {"NO DEFAULT SPECIFIED FOR WIRE: " + this + " in component " + this.component.getClass}, 
-        this.line)
-      return
-    }
-    if (default != null) {
-      genMuxes(default, updates)
-    } else {
-      if (topCond.isTrue)
-        genMuxes(topValue, updates.toList.tail)
-      else if (lastCond.canBeUsedAsDefault)
-        genMuxes(lastValue, updates)
-    }
-  }
-  def procAssign(src: Node): Unit
-  Module.procs += this;
-}
-
 trait nameable {
   var name: String = "";
   /** _named_ is used to indicates name was set explicitely
@@ -213,7 +177,6 @@ trait nameable {
 }
 
 
-class Delay extends Node {
-  override def isReg: Boolean = true;
+trait Delay {
 }
 

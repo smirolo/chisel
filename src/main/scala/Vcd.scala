@@ -36,8 +36,10 @@ import ChiselError._
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
-class VcdBackend extends Backend {
-  val keywords = new HashSet[String]();
+/* XXX extends Backend because of a call to super.emitRef(node) */
+class VcdTrace extends Backend {
+
+  val keywords: HashSet[String] = new HashSet[String]()
 
   override def emitTmp(node: Node): String =
     emitRef(node)
@@ -71,7 +73,7 @@ class VcdBackend extends Backend {
   }
 
   override def emitDec(node: Node): String =
-    if (Module.isVCD && !node.isLit) "  dat_t<" + node.width + "> " + emitRef(node) + "__prev" + ";\n" else ""
+    if (Module.isVCD && !node.isInstanceOf[Literal]) "  dat_t<" + node.width + "> " + emitRef(node) + "__prev" + ";\n" else ""
 
   def dumpVCDScope(c: Module, file: java.io.FileWriter, top: Module, names: HashMap[Node, String]): Unit = {
     file.write("    fprintf(f, \"" + "$scope module " + c.name + " $end" + "\\n\");\n");

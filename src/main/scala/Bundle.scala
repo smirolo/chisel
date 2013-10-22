@@ -134,6 +134,11 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
     elementsCache
   }
 
+  def fromBits( bits: UInt ): this.type = {
+    // XXX implement correctly
+    this
+  }
+
   override def toString: String = {
     var res = "BUNDLE(";
     var sep = "";
@@ -143,11 +148,6 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
     }
     res += ")";
     res
-  }
-
-  override def terminate(): Unit = {
-    for ((n, i) <- elements)
-      i.terminate();
   }
 
   def view (elts: ArrayBuffer[(String, Data)]): Bundle = {
@@ -180,7 +180,6 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
   def +=[T <: Data](other: T) {
     elements;
     elementsCache += ((other.name, other));
-    if(isTypeNode) other.setIsTypeNode;
   }
 
   def -=[T <: Data](other: T) {
@@ -200,30 +199,17 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
     this
   }
 
-  override def removeTypeNodes() {
-    for ((n, elt) <- elements)
-      elt.removeTypeNodes
-  }
-
-  override def traceableNodes: Array[Node] = elements.map(tup => tup._2).toArray;
-
-  override def traceNode(c: Module, stack: Stack[() => Any]) {
-    for((n, i) <- flatten) {
-      stack.push(() => i.traceNode(c, stack))
-    }
-  }
-
-  override def apply(name: String): Data = {
+  def apply(name: String): Data = {
     for((n,i) <- elements)
       if(name == n) return i;
     throw new NoSuchElementException();
     return null;
   }
 
-  override def <>(src: Node) {
-    if(comp == null || (dir == "output" &&
+  override def <>(src: Data) {
+    if(dir == "output" &&
       src.isInstanceOf[Bundle] &&
-      src.asInstanceOf[Bundle].dir == "output")){
+      src.asInstanceOf[Bundle].dir == "output"){
       src match {
         case other: Bundle => {
           for ((n, i) <- elements) {
@@ -241,15 +227,16 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
     } else {
       src match {
         case other: Bundle => {
-          comp assign other
+//XXX          comp assign other
         }
         case default =>
           ChiselError.warning("CONNECTING INCORRECT TYPES INTO WIRE OR REG")
       }
     }
+    this
   }
 
-  override def ^^(src: Node) {
+  override def ^^(src: Data) {
     src match {
       case other: Bundle =>
         for ((n, i) <- elements) {
@@ -266,7 +253,7 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
     return false;
   }
 
-  override def :=[T <: Data](src: T): Unit = {
+  override def :=(src: Data): Unit = {
     src match {
       case bun: Bundle => this := bun
       case any => super.:=(any)
@@ -274,10 +261,6 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
   }
 
   def :=(src: Bundle): Unit = {
-    if(this.isTypeNode && comp != null) {
-      this.comp.procAssign(src.toNode)
-      return
-    }
     for((n, i) <- elements) {
       i match {
         case bundle: Bundle => {
@@ -304,32 +287,14 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
     sort(res.toArray)
   }
 
+/*
   override def getWidth(): Int = {
     var w = 0
     for((name, io) <- elements)
       w += io.getWidth
     w
   }
-
-  override def toNode: Node = {
-    if(bundledElm == null) {
-      val nodes = flatten.map{case (n, i) => i};
-      bundledElm = Concatenate(nodes.head, nodes.tail.toList: _*)
-    }
-    bundledElm
-  }
-
-  override def fromNode(n: Node): this.type = {
-    val res = this.clone()
-    var ind = 0;
-    for((name, io) <- res.flatten.toList.reverse) {
-      io.asOutput();
-      if(io.width > 1) io assign NodeExtract(n, ind + io.width-1, ind) else io assign NodeExtract(n, ind);
-      ind += io.width;
-    }
-    res.setIsTypeNode
-    res
-  }
+ */
 
   override def asDirectionless(): this.type = {
     elements.foreach(_._2.asDirectionless)
@@ -351,11 +316,5 @@ class Bundle(view_arg: Seq[String] = null) extends CompositeData {
 
   override def isDirectionless: Boolean = {
     (dir == "") && elements.map{case (n,i) => i.isDirectionless}.reduce(_&&_)
-  }
-
-  override def setIsTypeNode() {
-    isTypeNode = true;
-    for ((n, i) <- elements)
-      i.setIsTypeNode
   }
 }

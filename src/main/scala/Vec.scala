@@ -73,8 +73,8 @@ object Vec {
   /** Returns a new *Vec* from a sequence of *Data* nodes.
     */
   def apply[T <: Data](elts: Seq[T]): Vec[T] = {
-    val res = if (elts.forall(_.litOf != null) && elts.head.getWidth > 0) {
-      new ROM(elts.map(_.litOf), i => elts.head.clone)
+    val res = if (elts.forall(_.node.isInstanceOf[Literal]) && elts.head.getWidth > 0) {
+      new ROM(elts.map(_.node.asInstanceOf[Literal]), i => elts.head.clone)
     } else {
       new Vec[T](i => elts.head.clone)
     }
@@ -126,22 +126,24 @@ object Vec {
 
 }
 
-class VecProc extends proc {
+class VecProc extends CondAssign {
   var addr: UInt = null
   var elms: ArrayBuffer[Bits] = null
 
-  override def genMuxes(default: Node) {}
+  def genMuxes(default: Node) {}
 
   def procAssign(src: Node) {
     val onehot = VecUIntToOH(addr, elms.length)
     Module.searchAndMap = true
     for(i <- 0 until elms.length){
       when (getEnable(onehot, i)) {
+/* XXX Really what is .comp?
         if(elms(i).comp != null) {
           elms(i).comp procAssign src
         } else {
           elms(i) procAssign src
         }
+ */
       }
     }
     Module.searchAndMap = false
@@ -153,9 +155,10 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
   val readPortCache = new HashMap[UInt, T]
   var sortedElementsCache: ArrayBuffer[ArrayBuffer[Data]] = null
   var flattenedVec: Node = null
+
   override def apply(idx: Int): T = {
-    super.apply(idx)
-  };
+    self(idx)
+  }
 
   def sortedElements: ArrayBuffer[ArrayBuffer[Data]] = {
     if (sortedElementsCache == null) {
@@ -177,8 +180,9 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
     sortedElementsCache
   }
 
-  def apply(ind: UInt): T =
-    read(ind)
+  def apply(index: UInt): T = { self(0) } // XXX
+/* XXX This should really be in the Mem
+    = read(ind)
 
   def write(addr: UInt, data: T) {
     if(data.isInstanceOf[Node]){
@@ -203,18 +207,18 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
     val iaddr = UInt(width=log2Up(length))
     iaddr.inputs += addr
     for(((n, io), sortedElm) <- res.flatten zip sortedElements) {
-      io assign VecMux(iaddr, sortedElm)
+// XXX what's the point of this?      io assign VecMux(iaddr, sortedElm)
 
       // setup the comp for writes
       val io_comp = new VecProc()
       io_comp.addr = iaddr
       io_comp.elms = sortedElm.asInstanceOf[ArrayBuffer[Bits]] // XXX ?
-      io.comp = io_comp
+      // XXX io.comp = io_comp
     }
     readPortCache += (addr -> res)
-    res.setIsTypeNode
     res
   }
+ */
 
   override def flatten: Array[(String, Bits)] = {
     val res = new ArrayBuffer[(String, Bits)]
@@ -223,7 +227,7 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
     res.toArray
   }
 
-  override def <>(src: Node) {
+  override def <>(src: Data) {
     src match {
       case other: Vec[T] => {
         for((b, o) <- self zip other.self)
@@ -232,12 +236,13 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
     }
   }
 
-  override def ^^(src: Node) = {
+  override def ^^(src: Data) {
     src match {
       case other: Vec[T] =>
         for((b, o) <- self zip other.self)
           b ^^ o
     }
+    this
   }
 
   def <>(src: Vec[T]) {
@@ -290,23 +295,6 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
       this(i) := src(i)
   }
 
-  override def removeTypeNodes() {
-    for(bundle <- self)
-      bundle.removeTypeNodes
-  }
-
-  override def traceableNodes: Array[Node] = self.toArray
-
-  override def traceNode(c: Module, stack: Stack[() => Any]) {
-    val ins = if (this.isInstanceOf[ROM [ _ ]]) this.asInstanceOf[ROM [ _ ] ].lits.toArray
-              else this.flatten.map(_._2)
-      
-    for(i <- ins) {
-      stack.push(() => i.traceNode(c, stack))
-    }
-    stack.push(() => super.traceNode(c, stack))
-  }
-
   override def flip(): this.type = {
     for(b <- self)
       b.flip();
@@ -341,28 +329,6 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
     res.asInstanceOf[this.type]
   }
 
-  override def toNode: Node = {
-    if(flattenedVec == null){
-      val nodes = flatten.map{case(n, i) => i};
-      flattenedVec = Concatenate(nodes.head, nodes.tail.toList: _*)
-    }
-    flattenedVec
-  }
-
-  override def fromNode(n: Node): this.type = {
-    val res = this.clone();
-    var ind = 0;
-    for((name, io) <- res.flatten.toList.reverse) {
-      io.asOutput();
-      if(io.width > 1) {
-        io assign NodeExtract(n, ind + io.width-1, ind)
-      } else {
-        io assign NodeExtract(n, ind);
-      }
-      ind += io.width;
-    }
-    res
-  }
 
   override def asDirectionless(): this.type = {
     self.foreach(_.asDirectionless)
@@ -379,12 +345,6 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
     this
   }
 
-  override def setIsTypeNode() {
-    isTypeNode = true;
-    for(elm <- self)
-      elm.setIsTypeNode
-  }
-
   override def toBits(): UInt = {
     val reversed = this.reverse.map(_.toBits)
     Cat(reversed.head, reversed.tail: _*)
@@ -392,7 +352,7 @@ class Vec[T <: Data](val gen: (Int) => T) extends CompositeData with Cloneable w
 
   def forall(p: T => Bool): Bool = (this map p).fold(Bool(true))(_&&_)
   def exists(p: T => Bool): Bool = (this map p).fold(Bool(false))(_||_)
-  def contains[T <: Bits](x: T): Bool = this.exists(_ === x)
+  def contains(x: Bits): Bool = this.exists(_ === x)
   def count(p: T => Bool): UInt = PopCount(this map p)
 
   private def indexWhereHelper(p: T => Bool) = this map p zip (0 until size).map(i => UInt(i))

@@ -44,70 +44,42 @@ object Bits {
 
 
 /** Base class for built-in Chisel types Bits and SInt. */
-abstract class Bits extends Data with proc {
+abstract class Bits(node: Node = new CondAssign()) extends Data(node) {
+
   Module.ioMap += ((this, Module.ioCount));
   Module.ioCount += 1;
 
-  var canBeUsedAsDefault = false
   var dir: IODirection = null;
+  /** width as inputed by the developper. */
+  var width: Int = -1;
 
   def create(dir: IODirection, width: Int) {
     this.dir = dir;
-    if(width > 0) {
-      this.init("", width);
-    } else {
-      this.init("", widthOf(0))
-    }
+    this.width = width;
   }
 
-  /** assigns this instance as the data type for *node*.
+  /** Returns ``true`` when this Bits instance is bound to a ``Node``
+    that generates a constant signal.
     */
-  protected final def asTypeFor(node: Node): this.type = {
-    this assign node
-    this.setIsTypeNode
-    if(!node.isInstanceOf[Literal]) node.nameHolder = this
-    this
+  def isConst: Boolean = {
+    node != null && node.isInstanceOf[Literal]
   }
 
-  def fromInt(x: Int): this.type;
 
-  def toSInt(): SInt = chiselCast(this){SInt()};
+  /** bind src as an input to node XXX Use BindingNode */
+  def assign(src: Node) {
+  }
 
-  def toUInt(): UInt = chiselCast(this){UInt()};
 
-  def default: Node = if (inputs.length < 1 || inputs(0) == null) null else inputs(0);
-
-  override def litOf: Literal = {
-    if(inputs.length == 1 && inputs(0) != null) {
-      inputs(0).litOf
+  override def procAssign(src: Node) {
+    if( node.isInstanceOf[CondAssign] ) {
+      node.asInstanceOf[CondAssign].append(Node.genCond(), src)
     } else {
-      null
-    }
-  }
-
-  // internal, non user exposed connectors
-  var assigned = false;
-
-
-  override def assign(src: Node) {
-    if(assigned || inputs.length > 0) {
-      ChiselError.error({"reassignment to Wire " + this + " with inputs " + this.inputs(0) + " RHS: " + src});
-    } else {
-      assigned = true; super.assign(src)
-    }
-  }
-
-  def procAssign(src: Node) {
-    if (assigned) {
       ChiselError.error("reassignment to Node");
-    } else {
-      updates += ((genCond(), src))
     }
   }
 
   //code generation stuff
-
-  override def apply(name: String): Data = this
 
   override def flatten: Array[(String, Bits)] = Array((name, this));
 
@@ -122,15 +94,7 @@ abstract class Bits extends Data with proc {
         + getClass.getName + "("
         + (if (dir == INPUT) "INPUT, "
         else if (dir == OUTPUT) "OUTPUT, " else "")
-        + "width=" + width_
-        + ", connect to " + inputs.length + " inputs: (")
-    var sep = ""
-    for( i <- inputs ) {
-      str = (str + sep + (if (i.name != null) i.name else "?")
-        + "[" + i.getClass.getName + "]"
-        + " in " + (if (i.component != null) i.component.getClass.getName else "?"))
-      sep = ", "
-    }
+        + "width=" + width)
     str = str + "))"
     str
   }
@@ -165,125 +129,131 @@ abstract class Bits extends Data with proc {
     return dir == null
   }
 
-  override def <>(src: Node) {
+  /* The <> operator bulk connects interfaces of opposite direction between
+   sibling modules or interfaces of same direction between parent/child modules.
+
+   Bulk connections connect leaf ports using pathname matching. Connections
+   are only made if one of the ports is non-null, allowing users to repeatedly
+   bulk-connect partially filled interfaces.
+
+   After all connections are made and the circuit is being elaborated,
+   Chisel warns users if ports have other than exactly one connection to them.
+  */
+  override def <>(right: Data): Unit = {
+    right match {
+      case other: Bits => this <> other;
+      case _ => super.<>(right)
+    }
+  }
+
+  def <>(other: Bits) {
     if (dir == INPUT) {
-      src match {
-      case other: Bits =>
-          if (other.dir == OUTPUT) { // input - output connections
-          if(this.component == other.component && !isTypeNode) {//passthrough
-            other assign this
-          } else if (this.component.parent == other.component.parent || isTypeNode) { //producer - consumer
-            if(other.inputs.length > 0 || other.updates.length > 0 ) {
-              this assign other // only do assignment if output has stuff connected to it
+          if (other.dir == OUTPUT) {
+            // input - output connections
+            if(this.component == other.component) {
+              // passthrough
+              other assign this.node
+            } else if (this.component.parent == other.component.parent) {
+              // producer - consumer
+              if(other.node.inputs.length > 0 ) {
+                this assign other.node // only do assignment if output has stuff connected to it
+              }
+            } else {
+              ChiselError.error({"Undefined connections between " + this + " and " + other})
             }
-          } else {
-            ChiselError.error({"Undefined connections between " + this + " and " + other})
-          }
-        } else if (other.dir == INPUT) { // input <> input conections
+          } else if (other.dir == INPUT) {
+            // input <> input conections
             if(this.component == other.component.parent) { // parent <> child
-              other assign this
+              other assign this.node
             } else if(this.component.parent == other.component) { //child <> parent
-              this assign other
+              this assign other.node
             } else {
               ChiselError.error({"Can't connect Input " + this + " Input " + other})
             }
-          } else { // io <> wire
+          } else {
+            // io <> wire
             if(this.component == other.component) { //internal wire
-              other assign this
+              other assign this.node
             } else if(this.component.parent == other.component) { //external wire
-              this assign other
+              this assign other.node
             } else {
-            ChiselError.error({"Connecting Input " + this + " to " + other})
+              ChiselError.error({"Connecting Input " + this + " to " + other})
             }
-        }
-      case default =>
-        ChiselError.error({"Connecting Input " + this + " to IO without direction " + default})
-      }
+          }
     } else if (dir == OUTPUT) {
-      src match {
-        case other: Bits  =>
           if (other.dir == INPUT) { // input - output connections
-            if (this.component == other.component && !isTypeNode) { //passthrough
-              this assign other;
-            } else if (this.component.parent == other.component.parent || isTypeNode) { //producer - consumer
-              if(this.inputs.length > 0 || this.updates.length > 0) {
-                other assign this; // only do connection if I have stuff connected to me
+            if (this.component == other.component ) {
+              // passthrough
+              this assign other.node;
+            } else if (this.component.parent == other.component.parent ) {
+              // producer - consumer
+              if(this.node.inputs.length > 0) {
+                // only do connection if I have stuff connected to me
+                other assign this.node;
               }
             } else {
               ChiselError.error({"Undefined connection between " + this + " and " + other})
             }
           } else if (other.dir == OUTPUT) { // output <> output connections
             if(this.component == other.component.parent) { // parent <> child
-              if(other.inputs.length > 0 || other.updates.length > 0) {
-                this assign other // only do connection if child is assigning to that output
+              if(other.node.inputs.length > 0) {
+                // only do connection if child is assigning to that output
+                this assign other.node
               }
             } else if (this.component.parent == other.component) { // child <> parent
-              if(this.inputs.length > 0 || this.updates.length > 0) {
-                other assign this // only do connection if child (me) is assinging that output
+              if(this.node.inputs.length > 0) {
+                other assign this.node // only do connection if child (me) is assinging that output
               }
-            } else if (this.isTypeNode && other.isTypeNode) { //connecting two type nodes together
-              ChiselError.error("Ambiguous Connection of Two Nodes")
-            } else if (this.isTypeNode){ // type <> output
-              other assign this;
-            } else if (other.isTypeNode){ // output <> type
-              this assign other;
             } else {
               ChiselError.error({"Connecting Output " + this + " to Output " + other})
             }
           } else { // io <> wire
             if(this.component == other.component) { //output <> wire
-              this assign other
+              this assign other.node
             } else if(this.component.parent == other.component) {
               ChiselError.error({"Connecting Ouptut " + this + " to an external wire " + other})
             } else {
               ChiselError.error({"Connecting Output " + this + " to IO without direction " + other})
             }
           }
-        case default =>
-          ChiselError.error({"Connecting Output " + this + " to an IO withouth direction " + default})
-      }
-    }
-    else {
-      src match {
-        case other: Bits =>
+    } else {
           if (other.dir == INPUT) { // wire <> input
             if(this.component == other.component) {
-              this assign other
+              this assign other.node
             } else if(this.component == other.component.parent) {
-              other assign this
+              other assign this.node
             } else {
               ChiselError.error({"Undefined connection between wire " + this + " and input " + other})
             }
           } else if (other.dir == OUTPUT) { //wire <> output
             if(this.component == other.component) { // internal wire
-              other assign this
+              other assign this.node
             } else if(this.component == other.component.parent) { // external wire
-              this assign other
+              this assign other.node
             } else {
               ChiselError.error({"Undefined connection between wire " + this + " and output " + other})
             }
           } else {
-            this assign other
+            this assign other.node
           }
-        case default =>
-          ChiselError.error({"Undefined connection between " + this + " and " + default})
-      }
     }
   }
 
+/*XXX
   override def setIsClkInput {
     isClkInput = true
     this assign clk
   }
-
+ */
   override def clone: this.type = {
     val res = this.getClass.newInstance.asInstanceOf[this.type];
-    res.inferWidth = this.inferWidth
-    res.width_ = this.width_;
+    res.width = this.width;
     res.dir = this.dir;
+    res.node = this.node;
     res
   }
 
+/*
   override def maxNum: BigInt = {
     if (inputs.length == 0) {
       width;
@@ -303,37 +273,14 @@ abstract class Bits extends Data with proc {
       inputs(0) = inputs(0).matchWidth(width)
     }
   }
+ */
 
-  // Operators
-  protected final def newUnaryOp(opName: String): this.type = {
-    fromNode(UnaryOp(this, opName))
-  }
+  /** Assignment operator.
 
-  protected final def newBinaryOp(right: Bits, opName: String): this.type = {
-    fromNode(BinaryOp(this, right, opName))
-  }
-
-  protected final def newLogicalOp(right: Bits, opName: String): Bool = {
-    Bool(OUTPUT).asTypeFor(LogicalOp(this, right, opName))
-  }
-
-  protected final def newReductionOp(opName: String): Bool = {
-    Bool(OUTPUT).asTypeFor(ReductionOp(this, opName))
-  }
-
-  /** Assignment operator */
-  override def :=[T <: Data](src: T): Unit = {
-    src match {
-      case b: Bits => {
-        if(comp != null) {
-          comp procAssign src;
-        } else {
-          this procAssign src;
-        }
-      }
-      case any =>
-        this.asInstanceOf[Data] := src
-    }
+    The assignment operator can be called multiple times
+   */
+  def :=(src: Bits): Unit = {
+    this procAssign src.node;
   }
 
 
@@ -342,150 +289,35 @@ abstract class Bits extends Data with proc {
 
   /** Extract a single Bool at index *bit*.
     */
-  final def apply(bit: Int): Bool = { Extract(this, bit){Bool()}};
-  final def apply(bit: UInt): Bool = {Extract(this, bit){Bool()}};
+  final def apply(bit: Int): Bool = Extract(this, UInt(bit))
+  final def apply(bit: UInt): Bool = Extract(this, bit)
 
   /** Extract a range of bits */
-  final def apply(hi: Int, lo: Int): UInt = {Extract(this, hi, lo){UInt()}};
-  final def apply(hi: UInt, lo: UInt): UInt = {Extract(this, hi, lo, -1){UInt()}};
-  final def apply(range: (Int, Int)): UInt = this(range._1, range._2);
+  final def apply(hi: Int, lo: Int): UInt = Extract(this, UInt(hi), UInt(lo))
+  final def apply(hi: UInt, lo: UInt): UInt = Extract(this, hi, lo)
 
-  def unary_~(): this.type   = newUnaryOp("~");
-  def andR(): Bool           = newReductionOp("&");
-  def orR(): Bool            = newReductionOp("|");
-  def xorR(): Bool           = newReductionOp("^");
-  def != (b: Bits): Bool     = newLogicalOp(b, "!=");
-  def & (b: Bits): this.type = newBinaryOp(b, "&");
-  def | (b: Bits): this.type = newBinaryOp(b, "|");
-  def ^ (b: Bits): this.type = newBinaryOp(b, "^");
-  
-  def error(b: Bits): Bits = {
-    throw new Exception("+ not defined on " + this.getClass + " and " + b.getClass)
-    this
-  }
+/** can't define apply(range: (UInt, UInt)) because it gets same
+  signature after type erasure. */
+  final def apply(range: (Int, Int)): UInt = this(range._1, range._2)
 
-  def + (b: Bits): Bits = {
-    this match {
-      case u0: UInt => {
-        b match {
-          case u1: UInt => u0 + u1
-          case f1: SInt => u0 + f1
-          case _ => error(b)
-        }
-      }
-      case f0: SInt => {
-        b match {
-          case u1: UInt => f0 + u1
-          case f1: SInt => f0 + f1
-          case _ => error(b)
-        }
-      }
-      case _ => error(b)
-    }
-  }
-  def - (b: Bits): Bits = {
-    this match {
-      case u0: UInt => {
-        b match {
-          case u1: UInt => u0 - u1
-          case f1: SInt => u0 - f1
-          case _ => error(b)
-        }
-      }
-      case f0: SInt => {
-        b match {
-          case u1: UInt => f0 - u1
-          case f1: SInt => f0 - f1
-          case _ => error(b)
-        }
-      }
-      case _ => error(b)
-    }
-  }
-  def * (b: Bits): Bits = {
-    this match {
-      case u0: UInt => {
-        b match {
-          case u1: UInt => u0 * u1
-          case f1: SInt => u0 * f1
-          case _ => error(b)
-        }
-      }
-      case f0: SInt => {
-        b match {
-          case u1: UInt => f0 * u1
-          case f1: SInt => f0 * f1
-          case _ => error(b)
-        }
-      }
-      case _ => error(b)
-    }
-  }
-  def % (b: Bits): Bits = {
-    this match {
-      case u0: UInt => {
-        b match {
-          case u1: UInt => u0 % u1
-          case f1: SInt => u0 % f1
-          case _ => error(b)
-        }
-      }
-      case f0: SInt => {
-        b match {
-          case u1: UInt => f0 % u1
-          case f1: SInt => f0 % f1
-          case _ => error(b)
-        }
-      }
-      case _ => error(b)
-    }
-  }
-  def / (b: Bits): Bits = {
-    this match {
-      case u0: UInt => {
-        b match {
-          case u1: UInt => u0 / u1
-          case f1: SInt => u0 / f1
-          case _ => error(b)
-        }
-      }
-      case f0: SInt => {
-        b match {
-          case u1: UInt => f0 / u1
-          case f1: SInt => f0 / f1
-          case _ => error(b)
-        }
-      }
-      case _ => error(b)
-    }
-  }
-
-  override def ===[T <: Data](right: T): Bool = {
+  // to support implicit convestions
+  override def ===(right: Data): Bool = {
     right match {
-      case b: Bits => newLogicalOp(b, "===");
-      case _ =>
-        this.asInstanceOf[Data] === right
+      case bits: Bits => EqlOp(this, bits)
+      case _ => this === right.toBits
     }
   }
 
-  override def ##[T <: Data](right: T): this.type = {
-    right match {
-      case b: Bits => newBinaryOp(b, "##");
-      case _ =>
-        (this.asInstanceOf[Data] ## right).asInstanceOf[this.type];
-    }
-  }
+  def unary_~(): UInt = BitwiseRev(this)
+  def andR(): Bool = ReduceAndOp(this)
+  def orR(): Bool = ReduceOrOp(this)
+  def xorR(): Bool = ReduceXorOp(this)
+  def != (right: Bits): Bool = NeqOp(this, right)
+  def & (right: Bits): this.type = AndOp(this, right)
+  def | (right: Bits): this.type = OrOp(this, right)
+  def ^ (right: Bits): this.type = XorOp(this, right)
+
+  def ##(right: Bits): UInt = CatOp(this, right)
 }
 
 
-object andR {
-    def apply(x: Bits): Bool = x.andR
-}
-
-object orR {
-    def apply(x: Bits): Bool = x.orR
-}
-
-object xorR {
-    def apply(x: Bits): Bool = x.xorR
-}

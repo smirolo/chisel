@@ -40,18 +40,36 @@ import ChiselError._
   Instances of Data are meant to help with construction and correctness
   of a logic graph. They will trimmed out of the graph before a *Backend*
   generates target code.
-  */
-abstract class Data extends Node {
-  var comp: proc = null;
 
-  // Interface required by Vec:
-  def ===[T <: Data](right: T): Bool = {
-    throw new Exception("=== not defined on " + this.getClass
-      + " and " + right.getClass)
+  Instances of Data are used to transport data types (UInt, SInt, etc)
+  while executing the Scala program. These data types are used to create
+  Nodes through dynamic dispatch.
+  */
+abstract class Data(var node: Node = null) extends nameable {
+
+  /* Component this AST Data Type belongs to. We use it
+   in the <> operator to bind nodes. */
+  val component: Module = Module.getComponent();
+
+  def nameIt(name: String) {}
+
+  def getWidth(): Int = node.getWidth()
+
+  // 2 following: Interface required by Vec:
+  def ===(right: Data): Bool = {
+    if(this.getClass != right.getClass) {
+      ChiselError.error("=== not defined on " + this.getClass
+        + " and " + right.getClass);
+    }
+    Bool()
   }
 
-  def toBits(): UInt = chiselCast(this){UInt()};
+  def toBits(): UInt = {
+    ChiselError.error("toBits not defined on " + this.getClass)
+    UInt()
+  }
 
+/*
   def toBool(): Bool = {
     if(this.getWidth > 1) {
       throw new Exception("multi bit signal " + this + " converted to Bool");
@@ -67,44 +85,50 @@ abstract class Data extends Node {
     throw new Exception("## not defined on " + this.getClass + " and " + right.getClass)
   }
 
-
-  def setIsTypeNode {
-    assert(inputs.length > 0, ChiselError.error("Type Node must have an input"))
-    isTypeNode = true
-    inferWidth = widthOf(0)
-  }
-
   def apply(name: String): Data = null
+ */
+
   def flatten: Array[(String, Bits)] = Array[(String, Bits)]();
-  def terminate(): Unit = { }
+
+  /** Flips the direction (*dir*) of instances derived from INPUT
+    to OUTPUT or OUTPUT to INPUT respectively for Bits
+    and recursively for Bundle/VecT.
+
+    Returns this instance with its exact type.
+    */
   def flip(): this.type = this;
+
+  /** Sets the direction (*dir*) of instances derived from Bits to INPUT
+    or recursively sets members of Bundle/Vec to INPUT.
+
+    Returns this instance with its exact type.
+    */
   def asInput(): this.type = this;
 
   /** Sets the direction (*dir*) of instances derived from Bits to OUTPUT
     or recursively sets members of Bundle/Vec to OUTPUT.
+
     Returns this instance with its exact type.
     */
   def asOutput(): this.type
+
   def asDirectionless(): this.type
+
   def isDirectionless: Boolean = true;
 
-  def toNode: Node = this;
-
-  /** Factory method to create and assign a leaf-type instance out of a subclass
-    of *Node* instance which we have lost the concrete type. */
-  def fromNode(n: Node): this.type;
-  def fromBits(b: Bits): this.type = {
-    val n = fromNode(b)
-    n.setIsTypeNode
-    n
+  def procAssign(src: Node): Unit = {
+    if(this.getClass != src.getClass) {
+      ChiselError.error("procAssign not defined on " + this.getClass
+        + " and " + src.getClass);
+    }
   }
 
-  def :=[T <: Data](data: T): Unit = {
+  def :=(data: Data): Unit = {
     if(this.getClass != data.getClass) {
       ChiselError.error(":= not defined on " + this.getClass
         + " and " + data.getClass);
     }
-    comp procAssign data;
+// XXX fix later:    this procAssign data.node;
   }
 
   override def clone(): this.type = {
@@ -120,17 +144,14 @@ abstract class Data extends Node {
     }
   }
 
-  override def nameIt(path: String) {
-    if (isTypeNode && comp != null) {
-      comp.nameIt(path)
-    } else {
-      super.nameIt(path)
-    }
-  }
-
+/*
   def setWidth(w: Int) {
     this.width = w;
   }
+ */
+
+  def ^^(src: Data): Unit = {}
+  def <>(src: Data): Unit = {}
 }
 
 abstract class CompositeData extends Data {

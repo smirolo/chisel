@@ -36,6 +36,7 @@ import scala.reflect._
 
 object Reg {
 
+/* XXX
   def regMaxWidth(m: Node) =
     if (isInGetWidth) {
       throw new Exception("getWidth was called on a Register or on an object connected in some way to a Register that has a statically uninferrable width")
@@ -50,13 +51,13 @@ object Reg {
     } else {
       fixWidth(w)
     }
-
+ */
   /** Rule: if r is using an inferred width, then don't enforce a width. If it is using a user inferred
     width, set the the width
 
     XXX Can't specify return type. There is a conflict. It is either
     (Node) => (Int) or Int depending which execution path you believe.
-    */
+    
   def regWidth(r: Node) = {
     val rLit = r.litOf
     if (rLit != null && rLit.hasInferredWidth) {
@@ -65,10 +66,10 @@ object Reg {
       fixWidth(r.getWidth)
     }
   }
-
+*/
   def validateGen[T <: Data](gen: => T) {
     for ((n, i) <- gen.flatten)
-      if (!i.inputs.isEmpty || !i.updates.isEmpty) {
+      if (!i.node.inputs.isEmpty || !i.node.asInstanceOf[CondAssign].updates.isEmpty) {
         throwException("Invalid Type Specifier for Reg")
       }
   }
@@ -103,39 +104,29 @@ object Reg {
     // asOutput flip the direction and returns this.
     val res = gen.asOutput
 
-    if(init != null) {
-      for((((res_n, res_i), (data_n, data_i)), (rval_n, rval_i)) <- res.flatten zip d zip init.flatten) {
-
-        assert(rval_i.getWidth > 0,
-          {ChiselError.error("Negative width to wire " + res_i)})
-        val reg = new Reg()
-
-        reg.init("", regWidth(rval_i), data_i, rval_i)
-
-        // make output
-        reg.isReset = true
-        res_i.inputs += reg
-        res_i.comp = reg
+    val reg =
+      if(init != null) {
+        for((((res_n, res_i), (data_n, data_i)), (rval_n, rval_i))
+          <- res.flatten zip d zip init.flatten) {
+          assert(rval_i.getWidth > 0,
+            {ChiselError.error("Negative width to wire " + res_i)})
+          val reg = new Reg()
+          reg.inputs.append(data_i.node)
+          reg.inputs.append(rval_i.node)
+          // make output
+          reg.isReset = true
+        }
+        new Reg()
+      } else {
+        for(((res_n, res_i), (data_n, data_i)) <- res.flatten zip d) {
+          val w = res_i.getWidth
+          val reg = new Reg()
+          reg.inputs.append(data_i.node)
+          reg.clock = clock
+        }
+        new Reg()
       }
-    } else {
-      for(((res_n, res_i), (data_n, data_i)) <- res.flatten zip d) {
-        val w = res_i.getWidth
-        val reg = new Reg()
-        reg.init("", regWidth(w), data_i)
-
-        // make output
-        res_i.inputs += reg
-        res_i.comp = reg
-      }
-    }
-    res.setIsTypeNode
-
-    // set clock
-    if (res.comp != null)
-      res.comp.clock = clock
-    else
-      res.clock = clock
-
+    res.node = reg
     res
   }
 
@@ -159,8 +150,9 @@ object RegInit {
 
 }
 
-
-class Reg extends Delay with proc {
+/** XXX Should extends Data or up. we are looking for an easy way to compile
+here. */
+class Reg extends CondAssign with Delay {
   def next: Node = inputs(0);
   def init: Node  = inputs(1);
   def enableSignal: Node = inputs(enableIndex);
@@ -172,17 +164,21 @@ class Reg extends Delay with proc {
   var assigned = false;
   var enable = Bool(false);
 
+  override def isReg: Boolean = true;
+
   def procAssign(src: Node) {
     if (assigned) {
       ChiselError.error("reassignment to Reg");
     }
-    val cond = genCond();
+    val cond = Bool(Node.genCond())
     if (conds.length >= 1) {
       isEnable = true
       enable = enable || cond;
     }
-    updates += ((cond, src))
+    updates += ((cond.node, src))
   }
+
+/* XXX deprecated
   override def genMuxes(default: Node): Unit = {
     if(isMemOutput) {
       inputs(0) = updates(0)._2
@@ -196,6 +192,8 @@ class Reg extends Delay with proc {
       super.genMuxes(default)
     }
   }
+ */
+
   def nameOpt: String = if (name.length > 0) name else "REG"
   override def toString: String = {
     "REG(" + nameOpt + ")"
@@ -209,9 +207,11 @@ class Reg extends Delay with proc {
     }
   }
 
+/* XXX deprecated
   override def forceMatchingWidths {
     if (inputs(0).width != width) {
       inputs(0) = inputs(0).matchWidth(width)
     }
   }
+ */
 }

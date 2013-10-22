@@ -32,82 +32,57 @@ package Chisel
 import Node._
 import scala.collection.mutable.ArrayBuffer
 
-object ListLookup {
-  def apply[T <: Data](addr: UInt, default: List[T], mapping: Array[(UInt, List[T])]): List[T] = {
-    if (Module.backend.isInstanceOf[CppBackend]) {
-      return CListLookup(addr, default, mapping)
+/** XXX Code generation if needed
+object CListLookup {
+  def apply[T <: Data](addr: UInt,
+    default: List[T], mapping: Array[(UInt, List[T])])
+    (implicit manif: Manifest[T]): List[T] = {
+
+    val map = mapping.map(m => (addr === m._1, m._2))
+    default.zipWithIndex map { case (d, i) =>
+      map.foldRight(d)((m, n) => Mux(m._1, m._2(i), n))
     }
-    val defaultNode = ListNode(default)
-    val mappingNode = mapping.map(x => MapNode(x))
-    val ll = new ListLookup[T]()
-    ll.initOf("", widthOf(1), List(addr, defaultNode) ++ mappingNode)
-    ll.wires = default.map(x => ListLookupRef(x, ll))
-    // TODO: GENERALIZE AND SHARE THIS
-    (default zip ll.wires).map{case(x, xRef) => {
-      val res = x match {
-        case fix: SInt => SInt(OUTPUT);
-        case any => UInt(OUTPUT);
-      }
-      xRef.nameHolder = res
-      res.inputs += xRef
-      res.setIsTypeNode
-      res.asInstanceOf[T]
-    }}
+  }
+}
+  */
+
+/** Dataflow switch statement. default list and mapping list
+  must be of equal length.
+  */
+object ListLookup {
+
+  def apply[T <: Data](addr: UInt, default: List[T],
+    mapping: Seq[(UInt, List[T])])(implicit m: Manifest[T]): List[T] = {
+
+    val op = new ListLookup(addr.node, default.map(_.node),
+      mapping.map(x => (x._1.node, x._2.map(_.node))))
+
+    var res: List[T] = Nil
+    for( i <- 0 to default.length ) {
+      val lookupRef: T = m.erasure.newInstance.asInstanceOf[T]
+      lookupRef.node = new ListLookupRef(op, default.length - i - 1)
+      res = res.::(lookupRef) // This will actually prepend ref!
+    }
+    res
   }
 }
 
-class ListLookup[T <: Data] extends Node {
-  var wires: List[ListLookupRef[T]] = null
+class ListLookup(addrN: Node, default: List[Node],
+    val map: Seq[(Node, List[Node])]) extends Node {
+
+  def inferWidth(): Width = new WidthOf(1)
+
+  inputs.append(addr)
+  inputs ++ default
+  map.map(x => { inputs.append(x._1); x._2.map(inputs.append(_)) })
 
   def addr: Node = inputs(0)
-
-  def defaultWires = inputs(1).inputs
-
-  def map: ArrayBuffer[(Node, ArrayBuffer[Node])] = {
-    val mapArray = inputs.slice(2, inputs.length)
-    val res = ArrayBuffer[(Node, ArrayBuffer[Node])]()
-    for(elm <- mapArray)
-      res += (elm.asInstanceOf[MapNode].addr -> elm.asInstanceOf[MapNode].data)
-    res
-  }
-
-  override def toString: String = "LISTLOOKUP(" + inputs(0) + ")";
-
-  override def isByValue: Boolean = false;
+  def wires: List[Node] = map.map(x => x._1).toList
+  def defaultWires: List[Node] = default
 }
 
-object ListLookupRef {
-  def apply[T <: Data](x: T, ll: ListLookup[T]): ListLookupRef[T] = {
-    val res = new ListLookupRef[T]()
-    res.init("", widthOf(1), ll, x)
-    res
-  }
+
+class ListLookupRef(addr: Node, index: Int) extends Node {
+  def inferWidth(): Width = new WidthOf(0)
 }
 
-class ListLookupRef[T <: Data]() extends Node {
-  override def toString: String = name
-}
-
-object ListNode {
-  def apply[T <: Data](nodes: List[T]): ListNode = {
-    val res = new ListNode()
-    res.init("", widthOf(0), nodes: _*)
-    res
-  }
-}
-
-class ListNode extends Node {
-}
-
-object MapNode {
-  def apply[T <: Data](map: (UInt, List[T])): MapNode = {
-    val res = new MapNode()
-    res.initOf("", widthOf(0), List(map._1) ++ map._2)
-    res
-  }
-}
-
-class MapNode extends Node {
-  def addr: Node = inputs(0)
-  def data = inputs.slice(1, inputs.length)
-}

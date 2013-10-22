@@ -31,58 +31,29 @@
 package Chisel
 
 object Bool {
-  def apply(x: Boolean): Bool = Lit(if(x) 1 else 0, 1){Bool()}
+  def apply(node: Node): Bool = {
+    val res = new Bool()
+    res.node = node
+    res
+  }
+
+  def apply(x: Boolean): Bool = Bool(Literal(if(x) 1 else 0, 1))
 
   def apply(dir: IODirection = null): Bool = {
-    val res = new Bool();
-    res.dir = dir;
-    res.init("", 1)
+    val res = new Bool()
+    res.dir = dir
+    res.width = 1
     res
   }
 }
 
 class Bool extends UInt {
 
-  /** Factory method to create and assign a *Bool* type to a Node *n*.
-    */
-  override def fromNode(n: Node): this.type = {
-    Bool(OUTPUT).asTypeFor(n).asInstanceOf[this.type]
-  }
-
-  override def fromInt(x: Int): this.type = {
-    Bool(x > 0).asInstanceOf[this.type]
-  }
-
   def :=(src: Bool): Unit = {
-    if(comp != null) {
-      comp procAssign src;
-    } else {
-      this procAssign src;
-    }
+    this procAssign src.node
   }
 
-  def := (src: Bits): Unit = {
-    if(src.getWidth > 1) {
-      throw new Exception("multi bit signal " + src + " converted to Bool");
-    }
-    if(src.getWidth == -1) {
-      throw new Exception("unable to automatically convert " + src + " to Bool, convert manually instead");
-    }
-    this := src(0) // We only have one bit in *src*.
-  }
-
-  def && (b: Bool): Bool = if (b.isTrue) this else if (this.isTrue) b else BinaryBoolOp(this, b, "&&");
-  def || (b: Bool): Bool = BinaryBoolOp(this, b, "||");
-
-  def isTrue: Boolean = {
-    if(inputs.length == 0) {
-      false
-    } else {
-      inputs(0) match {
-        case l: Literal => {l.isLit && l.value == 1};
-        case any        => false;
-      }
-    }
-  }
+  def && (right: Bool): Bool = LogicalAndOp(this, right)
+  def || (right: Bool): Bool = LogicalOrOp(this, right)
 
 }

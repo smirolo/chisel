@@ -29,43 +29,46 @@
 */
 
 package Chisel
-import Node._
 
-// used for component to component connections
-object Binding {
+/** This Node represents conditional assignments.
 
-  def apply(m: Node, c: Module, ioComp: Module): Node = {
-    if (Module.isEmittingComponents) {
-      val res = c.findBinding(m);
-      if (res == null) {
-        val res = new Binding(m, ioComp);
-        res.component = c;
-/* XXX rewrite Binding
-        c.nodes += res
-        res.init("", widthOf(0), m);
-        res.infer;
-        c.bindings += res;
- */
-        res
-      } else {
-        res;
-      }
+  It is a little special in that it can only be fuly evaluated
+  at the elaboration phase.
+  */
+class CondAssign extends Node {
+  // XXX Shouldn't be Node
+  def inferWidth(): Width = new FixedWidth(1)
+
+  var updates = new collection.mutable.ListBuffer[(Node, Node)];
+
+  private def genMuxes(default: Node, others: Seq[(Node, Node)]): Unit = {
+    val update = others.foldLeft(default)((v, u) => new MuxOp(u._1, u._2, v))
+    if (inputs.isEmpty) inputs += update else inputs(0) = update
+  }
+
+  def genMuxes(): Unit = {
+    if (inputs.length == 0 || inputs(0) == null) {
+      ChiselError.error({"NO UPDATES ON " + this}, this.line)
     } else {
-      m
+      val (topCond, topValue) = updates.head
+      val (lastCond, lastValue) = updates.last
+      if (!topCond.boundToTrue && !lastCond.canBeUsedAsDefault) {
+        ChiselError.error(
+          {"NO DEFAULT SPECIFIED FOR WIRE: " + this + " in component " + this.component.getClass},
+          this.line)
+      } else {
+        if (topCond.boundToTrue)
+          genMuxes(topValue, updates.toList.tail)
+        else if (lastCond.canBeUsedAsDefault)
+          genMuxes(lastValue, updates)
+      }
     }
   }
-}
 
-/** Pass through binding
+  /** Add another update path. */
+  def append( cond: Node, value: Node ) {
+    updates += ((cond, value))
+  }
 
-  This kind of node is used to connect nodes accross module boundaries.
-*/
-class Binding(tn: Node, tc: Module) extends Node {
-
-  val targetNode: Node = tn;
-  val targetComponent: Module = tc;
-
-  def inferWidth(): Width = new WidthOf(0)
-
-  override def toString: String = "BINDING(" + inputs(0) + ")";
+  Module.procs += this;
 }

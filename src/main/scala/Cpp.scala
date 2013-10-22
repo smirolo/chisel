@@ -59,15 +59,6 @@ object CString {
   }
 }
 
-object CListLookup {
-  def apply[T <: Data](addr: UInt, default: List[T], mapping: Array[(UInt, List[T])]): List[T] = {
-    val map = mapping.map(m => (addr === m._1, m._2))
-    default.zipWithIndex map { case (d, i) =>
-      map.foldRight(d)((m, n) => Mux(m._1, m._2(i), n))
-    }
-  }
-}
-
 class CppBackend extends Backend {
   val keywords = new HashSet[String]();
 
@@ -121,12 +112,6 @@ class CppBackend extends Backend {
         ""
       case x: Literal =>
         ""
-      case x: ListNode =>
-        ""
-      case x: MapNode =>
-        ""
-      case x: LookupMap =>
-        ""
       case x: Reg =>
         "  dat_t<" + node.width + "> " + emitRef(node) + ";\n" +
         "  dat_t<" + node.width + "> " + emitRef(node) + "_shadow;\n";
@@ -170,166 +155,387 @@ class CppBackend extends Backend {
   def opFoldLeft(o: Op, initial: (String, String) => String, subsequent: (String, String, String) => String) =
     (1 until words(o.inputs(0))).foldLeft(initial(emitLoWordRef(o.inputs(0)), emitLoWordRef(o.inputs(1))))((c, i) => subsequent(c, emitWordRef(o.inputs(0), i), emitWordRef(o.inputs(1), i)))
 
+
+  /** Emit code for sign and absolute value
+    */
+  def signAbs(opand: Node): (Node, Node) = {
+    val signOpand = new LtnSOp(opand, UInt(0).node)
+    emitDefLo(signOpand)
+    val signRev = new SignRevOp(opand)
+    emitDefLo(signRev)
+    val absOpand = new MuxOp(signOpand, signRev, opand)
+    emitDefLo(absOpand)
+    (signOpand, absOpand)
+  }
+
+  def emitLogicalOpDef(op: Op): String = {
+    (block((0 until words(op)).map(
+      i => emitWordRef(op, i) + " = " + emitWordRef(op.inputs(0), i)
+        + op.name + emitWordRef(op.inputs(1), i))))
+  }
+
+  def emitOrderOpDef(o: Op): String = {
+    val initial = (a: String, b: String) => a + o.name + b
+    val subsequent = (i: String, a: String, b: String) => ("(" + i + ") & "
+      + a + " == " + b + " || " + a + o.opSlug(0) + b)
+    val cond = opFoldLeft(o, initial, subsequent)
+    "  " + emitLoWordRef(o) + " = " + opFoldLeft(o, initial, subsequent) + ";\n"
+  }
+
   def emitDefLo(node: Node): String = {
     node match {
-      case x: Mux =>
+      case x: MuxOp =>
         emitTmpDec(x) +
         block(List("val_t __mask = -" + emitLoWordRef(x.inputs(0))) ++
               (0 until words(x)).map(i => emitWordRef(x, i) + " = " + emitWordRef(x.inputs(2), i) + " ^ ((" + emitWordRef(x.inputs(2), i) + " ^ " + emitWordRef(x.inputs(1), i) + ") & __mask)"))
 
-      case o: Op => {
-        emitTmpDec(o) +
-        (if (o.inputs.length == 1) {
-          (if (o.op == "|") {
-            "  " + emitLoWordRef(o) + " = (" + (0 until words(o.inputs(0))).map(emitWordRef(o.inputs(0), _)).reduceLeft(_ + " | " + _) + ") != 0;\n"
-          } else if (o.op == "&") {
-            "  " + emitLoWordRef(o) + " = " + (0 until words(o.inputs(0))).map(i => "(" + emitWordRef(o.inputs(0), i) + " == " + (if (o.inputs(0).width - i*bpw < bpw) (1L << (o.inputs(0).width - i*bpw))-1 else "(val_t)-1") + ")").reduceLeft(_ + " & " + _) + ";\n"
-          } else if (o.op == "^") {
-            val res = ArrayBuffer[String]()
-            res += "val_t __x = " + (0 until words(o.inputs(0))).map(emitWordRef(o.inputs(0), _)).reduceLeft(_ + " ^ " + _)
-            for (i <- log2Up(min(bpw, o.inputs(0).width))-1 to 0 by -1)
-              res += "__x = (__x >> " + (1L << i) + ") ^ __x"
-            res += emitLoWordRef(o) + " = __x & 1"
-            block(res)
-          } else if (o.op == "~") {
-            block((0 until words(o)).map(i => emitWordRef(o, i) + " = ~" + emitWordRef(o.inputs(0), i))) + trunc(o)
-          } else if (o.op == "-") {
-            block((0 until words(o)).map(i => emitWordRef(o, i) + " = -" + emitWordRef(o.inputs(0), i) + (if (i > 0) " - __borrow" else if (words(o) > 1) "; val_t __borrow" else "") + (if (i < words(o)-1) "; __borrow = " + emitWordRef(o.inputs(0), i) + " || " + emitWordRef(o, i) else ""))) + trunc(o)
-          } else if (o.op == "!") {
-            "  " + emitLoWordRef(o) + " = !" + emitLoWordRef(o.inputs(0)) + ";\n"
-          } else {
-            assert(false)
-            ""
-          })
-        } else if (o.op == "+" || o.op == "-") {
-          val res = ArrayBuffer[String]()
-          res += emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0)) + o.op + emitLoWordRef(o.inputs(1))
-          for (i <- 1 until words(o)) {
-            var carry = emitWordRef(o.inputs(0), i-1) + o.op + emitWordRef(o.inputs(1), i-1)
-            if (o.op == "+") {
-              carry += " < " + emitWordRef(o.inputs(0), i-1) + (if (i > 1) " || " + emitWordRef(o, i-1) + " < __c" else "")
-            } else {
-              carry += " > " + emitWordRef(o.inputs(0), i-1) + (if (i > 1) " || " + carry + " < " + emitWordRef(o, i-1) else "")
-            }
-            res += (if (i == 1) "val_t " else "") + "__c = " + carry
-            res += emitWordRef(o, i) + " = " + emitWordRef(o.inputs(0), i) + o.op + emitWordRef(o.inputs(1), i) + o.op + "__c"
-          }
-          block(res) + trunc(o)
-        } else if (o.op == "/") {
-          val cmd = "div_n(__d, __x, __y, " + o.width + ", " + o.inputs(0).width + ", " + o.inputs(1).width + ")"
-          block(makeArray("__d", o) ++ toArray("__x", o.inputs(0)) ++ toArray("__y", o.inputs(1)) ++ List(cmd) ++ fromArray("__d", o))
-        } else if (o.op == "*") {
-          if (o.width <= bpw) {
-            "  " + emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0)) + " * " + emitLoWordRef(o.inputs(1)) + ";\n"
-          } else {
-            val cmd = "mul_n(__d, __x, __y, " + o.width + ", " + o.inputs(0).width + ", " + o.inputs(1).width + ")"
-            block(makeArray("__d", o) ++ toArray("__x", o.inputs(0)) ++ toArray("__y", o.inputs(1)) ++ List(cmd) ++ fromArray("__d", o))
-          }
-        } else if (o.op == "<<") {
-          if (o.width <= bpw) {
-            "  " + emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0)) + " << " + emitLoWordRef(o.inputs(1)) + ";\n"
-          } else {
-            var shb = emitLoWordRef(o.inputs(1))
-            val res = ArrayBuffer[String]()
-            res ++= toArray("__x", o.inputs(0))
-            res += "val_t __c = 0"
-            res += "val_t __w = " + emitLoWordRef(o.inputs(1)) + " / " + bpw
-            res += "val_t __s = " + emitLoWordRef(o.inputs(1)) + " % " + bpw
-            res += "val_t __r = " + bpw + " - __s"
-            for (i <- 0 until words(o)) {
-              res += "val_t __v" + i + " = MASK(__x[CLAMP(" + i + "-__w,0," + (words(o.inputs(0)) - 1) + ")]," + i + ">=__w&&" + i + "<__w+" + words(o.inputs(0)) + ")"
-              res += emitWordRef(o, i) + " = __v" + i + " << __s | __c"
-              res += "__c = MASK(__v" + i + " >> __r, __s != 0)"
-            }
-            block(res) + trunc(o)
-          }
-        } else if (o.op == ">>") {
-          if (o.inputs(0).width <= bpw) {
-            if (o.isSigned) {
-              ("  " + emitLoWordRef(o) + " = (sval_t)("
-                + emitLoWordRef(o.inputs(0)) + " << "
-                + (bpw - o.inputs(0).width) + ") >> ("
-                + (bpw - o.inputs(0).width) + " + "
-                + emitLoWordRef(o.inputs(1)) + ");\n" + trunc(o))
-            } else {
-              ("  " + emitLoWordRef(o) + " = "
-                + emitLoWordRef(o.inputs(0)) + " >> "
-                + emitLoWordRef(o.inputs(1)) + ";\n")
-            }
-          } else {
-            var shb = emitLoWordRef(o.inputs(1))
-            val res = ArrayBuffer[String]()
-            res ++= toArray("__x", o.inputs(0))
-            res += "val_t __c = 0"
-            res += "val_t __w = " + emitLoWordRef(o.inputs(1)) + " / " + bpw
-            res += "val_t __s = " + emitLoWordRef(o.inputs(1)) + " % " + bpw
-            res += "val_t __r = " + bpw + " - __s"
-            if (o.isSigned) {
-              res += "val_t __msb = (sval_t)" + emitWordRef(o.inputs(0), words(o)-1) + (if (o.width % bpw != 0) " << " + (bpw-o.width%bpw) else "") + " >> " + (bpw-1)
-            }
-            for (i <- words(o)-1 to 0 by -1) {
-              res += "val_t __v" + i + " = MASK(__x[CLAMP(" + i + "+__w,0," + (words(o.inputs(0))-1) + ")],__w+" + i + "<" + words(o.inputs(0)) + ")"
-              res += emitWordRef(o, i) + " = __v" + i + " >> __s | __c"
-              res += "__c = MASK(__v" + i + " << __r, __s != 0)"
-              if (o.isSigned) {
-                res += emitWordRef(o, i) + " |= MASK(__msb << ((" + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ") % " + bpw + "), " + ((i + 1) * bpw) + " > " + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ")"
-                res += emitWordRef(o, i) + " |= MASK(__msb, " + (i*bpw) + " >= " + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ")"
-              }
-            }
-            if (o.isSigned) {
-              res += emitLoWordRef(o) + " |= MASK(__msb << ((" + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ") % " + bpw + "), " + bpw + " > " + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ")"
-            }
-            block(res) + (if (o.isSigned) trunc(o) else "")
-          }
-        } else if (o.op == "##") {
-          val lsh = o.inputs(1).width
-          block((0 until fullWords(o.inputs(1))).map(i => emitWordRef(o, i) + " = " + emitWordRef(o.inputs(1), i)) ++
-                (if (lsh % bpw != 0) List(emitWordRef(o, fullWords(o.inputs(1))) + " = " + emitWordRef(o.inputs(1), fullWords(o.inputs(1))) + " | " + emitLoWordRef(o.inputs(0)) + " << " + (lsh % bpw)) else List()) ++
-                (words(o.inputs(1)) until words(o)).map(i => emitWordRef(o, i)
-                  + " = " + emitWordRef(o.inputs(0), (bpw*i-lsh)/bpw)
-                  + (
-                    if (lsh % bpw != 0) {
-                      " >> " + (bpw - lsh % bpw) + (
-                        if ((bpw*i-lsh)/bpw + 1 < words(o.inputs(0))) {
-                          " | " + emitWordRef(o.inputs(0), (bpw*i-lsh)/bpw + 1) + " << " + (lsh%bpw)
-                        } else {
-                          ""
-                        })
-                    } else {
-                      ""
-                    })))
-        } else if (o.op == "|" || o.op == "&" || o.op == "^" || o.op == "||" || o.op == "&&") {
-          block((0 until words(o)).map(i => emitWordRef(o, i) + " = " + emitWordRef(o.inputs(0), i) + o.op + emitWordRef(o.inputs(1), i)))
-        } else if (o.op == "<" && o.isSigned) {
-            require(o.inputs(1).litOf.value == 0)
-            val shamt = (o.inputs(0).width-1) % bpw
-            "  " + emitLoWordRef(o) + " = (" + emitWordRef(o.inputs(0), words(o.inputs(0))-1) + " >> " + shamt + ") & 1;\n"
-        } else if (o.op == "<" || o.op == ">" || o.op == "<=" || o.op == ">=") {
-          require(!o.isSigned)
-          val initial = (a: String, b: String) => a + o.op + b
-          val subsequent = (i: String, a: String, b: String) => "(" + i + ") & " + a + " == " + b + " || " + a + o.op(0) + b
-          val cond = opFoldLeft(o, initial, subsequent)
-          "  " + emitLoWordRef(o) + " = " + opFoldLeft(o, initial, subsequent) + ";\n"
-        } else if (o.op == "==") {
-          val initial = (a: String, b: String) => a + " == " + b
-          val subsequent = (i: String, a: String, b: String) => "(" + i + ") & (" + a + " == " + b + ")"
-          "  " + emitLoWordRef(o) + " = " + opFoldLeft(o, initial, subsequent) + ";\n"
-        } else if (o.op == "!=") {
-          val initial = (a: String, b: String) => a + " != " + b
-          val subsequent = (i: String, a: String, b: String) => "(" + i + ") | (" + a + " != " + b + ")"
-          "  " + emitLoWordRef(o) + " = " + opFoldLeft(o, initial, subsequent) + ";\n"
-        } else {
-          require(false)
-          ""
-        })
+      case o: AddOp => {
+        val res = ArrayBuffer[String]()
+        res += (emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0))
+          + o.name + emitLoWordRef(o.inputs(1)))
+        for (i <- 1 until words(o)) {
+          var carry = (emitWordRef(o.inputs(0), i-1)
+            + o.name + emitWordRef(o.inputs(1), i-1))
+          carry += (" < " + emitWordRef(o.inputs(0), i-1)
+            + (if (i > 1) " || " + emitWordRef(o, i-1) + " < __c" else ""))
+          res += (if (i == 1) "val_t " else "") + "__c = " + carry
+          res += (emitWordRef(o, i) + " = "
+            + emitWordRef(o.inputs(0), i)
+            + o.name + emitWordRef(o.inputs(1), i) + o.name + "__c")
+        }
+        block(res) + trunc(o)
       }
 
-      case x: Extract =>
-        x.inputs.tail.foreach(e => x.validateIndex(e))
+      case o: SubOp => {
+        val res = ArrayBuffer[String]()
+        res += (emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0))
+          + o.name + emitLoWordRef(o.inputs(1)))
+        for (i <- 1 until words(o)) {
+          var carry = (emitWordRef(o.inputs(0), i-1)
+            + o.name + emitWordRef(o.inputs(1), i-1))
+          carry += (" > " + emitWordRef(o.inputs(0), i-1)
+            + (if (i > 1) " || " + carry + " < " + emitWordRef(o, i-1)
+            else ""))
+          res += (if (i == 1) "val_t " else "") + "__c = " + carry
+          res += (emitWordRef(o, i) + " = "
+            + emitWordRef(o.inputs(0), i)
+            + o.name + emitWordRef(o.inputs(1), i) + o.name + "__c")
+        }
+        block(res) + trunc(o)
+      }
+
+      case o: BitwiseRevOp =>
+        (emitTmpDec(o) + block((0 until words(o)).map(
+          i => emitWordRef(o, i) + " = ~" + emitWordRef(o.inputs(0), i)))
+          + trunc(o))
+
+      case o: CatOp => {
+        val lsh = o.inputs(1).width
+        block((0 until fullWords(o.inputs(1))).map(i => emitWordRef(o, i) + " = " + emitWordRef(o.inputs(1), i)) ++
+          (if (lsh % bpw != 0) List(emitWordRef(o, fullWords(o.inputs(1))) + " = " + emitWordRef(o.inputs(1), fullWords(o.inputs(1))) + " | " + emitLoWordRef(o.inputs(0)) + " << " + (lsh % bpw)) else List()) ++
+          (words(o.inputs(1)) until words(o)).map(i => emitWordRef(o, i)
+            + " = " + emitWordRef(o.inputs(0), (bpw*i-lsh)/bpw)
+            + (
+              if (lsh % bpw != 0) {
+                " >> " + (bpw - lsh % bpw) + (
+                  if ((bpw*i-lsh)/bpw + 1 < words(o.inputs(0))) {
+                    " | " + emitWordRef(o.inputs(0), (bpw*i-lsh)/bpw + 1) + " << " + (lsh%bpw)
+                  } else {
+                    ""
+                  })
+              } else {
+                ""
+              })))
+      }
+
+      case o: DivOp => {
+          val cmd = ("div_n(__d, __x, __y, " + o.width
+            + ", " + o.inputs(0).width + ", " + o.inputs(1).width + ")")
+          (block(makeArray("__d", o)
+            ++ toArray("__x", o.inputs(0))
+            ++ toArray("__y", o.inputs(1))
+            ++ List(cmd)
+            ++ fromArray("__d", o)))
+      }
+
+      case o: LeftShiftOp => {
+        if (o.width <= bpw) {
+          "  " + emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0)) + " << " + emitLoWordRef(o.inputs(1)) + ";\n"
+        } else {
+          var shb = emitLoWordRef(o.inputs(1))
+          val res = ArrayBuffer[String]()
+          res ++= toArray("__x", o.inputs(0))
+          res += "val_t __c = 0"
+          res += "val_t __w = " + emitLoWordRef(o.inputs(1)) + " / " + bpw
+          res += "val_t __s = " + emitLoWordRef(o.inputs(1)) + " % " + bpw
+          res += "val_t __r = " + bpw + " - __s"
+          for (i <- 0 until words(o)) {
+            res += "val_t __v" + i + " = MASK(__x[CLAMP(" + i + "-__w,0," + (words(o.inputs(0)) - 1) + ")]," + i + ">=__w&&" + i + "<__w+" + words(o.inputs(0)) + ")"
+            res += emitWordRef(o, i) + " = __v" + i + " << __s | __c"
+            res += "__c = MASK(__v" + i + " >> __r, __s != 0)"
+          }
+          block(res) + trunc(o)
+        }
+      }
+
+      case o: LogicalNegOp =>
+        (emitTmpDec(o) + "  " + emitLoWordRef(o) + " = !"
+          + emitLoWordRef(o.inputs(0)) + ";\n")
+
+      case o: MulOp =>
+        (if (o.width <= bpw) {
+          ("  " + emitLoWordRef(o) + " = "
+            + emitLoWordRef(o.inputs(0)) + " * "
+            + emitLoWordRef(o.inputs(1)) + ";\n")
+          } else {
+            val cmd = ("mul_n(__d, __x, __y, " + o.width
+              + ", " + o.inputs(0).width + ", " + o.inputs(1).width + ")")
+            (block(makeArray("__d", o)
+              ++ toArray("__x", o.inputs(0))
+              ++ toArray("__y", o.inputs(1))
+              ++ List(cmd)
+              ++ fromArray("__d", o)))
+          })
+
+      case o: ReduceAndOp =>
+        (emitTmpDec(o) + "  " + emitLoWordRef(o) + " = "
+          + (0 until words(o.inputs(0))).map(
+            i => "(" + emitWordRef(o.inputs(0), i) + " == "
+              + (if (o.inputs(0).width - i*bpw < bpw)
+                (1L << (o.inputs(0).width - i*bpw))-1
+              else "(val_t)-1") + ")").reduceLeft(_ + " & " + _) + ";\n")
+
+      case o: ReduceOrOp =>
+        (emitTmpDec(o) + "  " + emitLoWordRef(o) + " = ("
+          + (0 until words(o.inputs(0))).map(
+            emitWordRef(o.inputs(0), _)).reduceLeft(_ + " | " + _)
+          + ") != 0;\n")
+
+      case o: ReduceXorOp =>
+        (emitTmpDec(o) + {
+          val res = ArrayBuffer[String]()
+          res += "val_t __x = " + (0 until words(o.inputs(0))).map(
+            emitWordRef(o.inputs(0), _)).reduceLeft(_ + " ^ " + _)
+          for (i <- log2Up(min(bpw, o.inputs(0).width))-1 to 0 by -1)
+            res += "__x = (__x >> " + (1L << i) + ") ^ __x"
+          res += emitLoWordRef(o) + " = __x & 1"
+          block(res)
+        })
+
+      case o: OrOp => emitLogicalOpDef(o)
+      case o: AndOp => emitLogicalOpDef(o)
+      case o: XorOp => emitLogicalOpDef(o)
+      case o: LogicalOrOp => emitLogicalOpDef(o)
+      case o: LogicalAndOp => emitLogicalOpDef(o)
+
+      case o: SignRevOp =>
+        (emitTmpDec(o) + block((0 until words(o)).map(
+          i => emitWordRef(o, i) + " = -" + emitWordRef(o.inputs(0), i)
+            + (if (i > 0) " - __borrow"
+            else if (words(o) > 1) "; val_t __borrow" else "")
+            + (if (i < words(o)-1) "; __borrow = "
+              + emitWordRef(o.inputs(0), i) + " || " + emitWordRef(o, i)
+            else ""))) + trunc(o))
+
+      case o: RightShiftOp => {
+        if (o.inputs(0).width <= bpw) {
+          if (o.isSigned) {
+            ("  " + emitLoWordRef(o) + " = (sval_t)("
+              + emitLoWordRef(o.inputs(0)) + " << "
+              + (bpw - o.inputs(0).width) + ") >> ("
+              + (bpw - o.inputs(0).width) + " + "
+              + emitLoWordRef(o.inputs(1)) + ");\n" + trunc(o))
+          } else {
+            ("  " + emitLoWordRef(o) + " = "
+              + emitLoWordRef(o.inputs(0)) + " >> "
+              + emitLoWordRef(o.inputs(1)) + ";\n")
+          }
+        } else {
+          var shb = emitLoWordRef(o.inputs(1))
+          val res = ArrayBuffer[String]()
+          res ++= toArray("__x", o.inputs(0))
+          res += "val_t __c = 0"
+          res += "val_t __w = " + emitLoWordRef(o.inputs(1)) + " / " + bpw
+          res += "val_t __s = " + emitLoWordRef(o.inputs(1)) + " % " + bpw
+          res += "val_t __r = " + bpw + " - __s"
+          if (o.isSigned) {
+            res += "val_t __msb = (sval_t)" + emitWordRef(o.inputs(0), words(o)-1) + (if (o.width % bpw != 0) " << " + (bpw-o.width%bpw) else "") + " >> " + (bpw-1)
+          }
+          for (i <- words(o)-1 to 0 by -1) {
+            res += "val_t __v" + i + " = MASK(__x[CLAMP(" + i + "+__w,0," + (words(o.inputs(0))-1) + ")],__w+" + i + "<" + words(o.inputs(0)) + ")"
+            res += emitWordRef(o, i) + " = __v" + i + " >> __s | __c"
+            res += "__c = MASK(__v" + i + " << __r, __s != 0)"
+            if (o.isSigned) {
+              res += emitWordRef(o, i) + " |= MASK(__msb << ((" + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ") % " + bpw + "), " + ((i + 1) * bpw) + " > " + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ")"
+              res += emitWordRef(o, i) + " |= MASK(__msb, " + (i*bpw) + " >= " + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ")"
+            }
+          }
+          if (o.isSigned) {
+            res += emitLoWordRef(o) + " |= MASK(__msb << ((" + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ") % " + bpw + "), " + bpw + " > " + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ")"
+          }
+          block(res) + (if (o.isSigned) trunc(o) else "")
+        }
+      }
+
+      case o: LtnOp => emitOrderOpDef(o)
+      case o: GtrOp => emitOrderOpDef(o)
+      case o: LteOp => emitOrderOpDef(o)
+      case o: GteOp => emitOrderOpDef(o)
+
+      case o: EqlOp => {
+        val res = new StringBuilder
+        val a = o.inputs(0)
+        val b = o.inputs(1)
+        if (b.isInstanceOf[Literal] && b.asInstanceOf[Literal].isZ) {
+          val (bits, mask, swidth) = parseLit(b.asInstanceOf[Literal].name)
+          val and = new AndOp(a, Literal(BigInt(mask, 2)))
+          res.append(emitDefLo(and))
+          res.append(emitDefLo(new EqlOp(and, Literal(BigInt(bits, 2)))))
+        } else if (a.isInstanceOf[Literal] != null && a.asInstanceOf[Literal].isZ) {
+          val (bits, mask, swidth) = parseLit(b.asInstanceOf[Literal].name)
+          val and = new AndOp(b, Literal(BigInt(mask, 2)))
+          res.append(emitDefLo(and))
+          res.append(emitDefLo(new EqlOp(and, Literal(BigInt(bits, 2)))))
+        } else {
+          val initial = (a: String, b: String) => a + " == " + b
+          val subsequent = (i: String, a: String, b: String) => "(" + i + ") & (" + a + " == " + b + ")"
+          res.append("  " + emitLoWordRef(o) + " = "
+            + opFoldLeft(o, initial, subsequent) + ";\n")
+        }
+        res.toString
+      }
+
+      case o: NeqOp => {
+        val initial = (a: String, b: String) => a + " != " + b
+        val subsequent = (i: String, a: String, b: String) => "(" + i + ") | (" + a + " != " + b + ")"
+        ("  " + emitLoWordRef(o) + " = "
+          + opFoldLeft(o, initial, subsequent) + ";\n")
+      }
+
+      case o: GtrSOp => {
+        val left = o.inputs(0)
+        val right = o.inputs(1)
+        val (signLeft, absLeft) = signAbs(left)
+        val (signRight, absRight) = signAbs(right)
+        val ucond = new GtrOp(absLeft, absRight)
+        val result = new MuxOp(
+          new EqlOp(signLeft, signRight), ucond, signRight)
+        "XXX Generate code for gtrs"
+      }
+
+      case o: GteSOp => {
+        val left = o.inputs(0)
+        val right = o.inputs(1)
+        val (signLeft, absLeft) = signAbs(left)
+        val (signRight, absRight) = signAbs(right)
+        val ucond = new GtrOp(absLeft, absRight)
+        val result = new MuxOp(
+          new EqlOp(signLeft, signRight), ucond, signRight)
+        "XXX Generate code for gtes"
+      }
+
+      case o: LteSOp => {
+        val left = o.inputs(0)
+        val right = o.inputs(1)
+        val (signLeft, absLeft) = signAbs(left)
+        val (signRight, absRight) = signAbs(right)
+        val ucond = new LteOp(absLeft, absRight)
+        val result = new MuxOp(
+            new EqlOp(signLeft, signRight), ucond, signLeft)
+        "XXX Generate code for ltes"
+      }
+
+      case o: LtnSOp => {
+        val left = o.inputs(0)
+        val right = o.inputs(1)
+        val (signLeft, absLeft) = signAbs(left)
+        val (signRight, absRight) = signAbs(right)
+        val ucond = new LteOp(absLeft, absRight)
+        val result = new MuxOp(
+          new EqlOp(signLeft, signRight), ucond, signLeft)
+        val shamt = (result.width-1) % bpw
+        ("  " + emitLoWordRef(o) + " = ("
+          + emitWordRef(result, words(result)-1) + " >> " + shamt + ") & 1;\n")
+      }
+
+      case o: MulSOp => {
+        val res = new StringBuilder
+        val left = o.inputs(0)
+        val right = o.inputs(1)
+        val (signLeft, absLeft) = signAbs(left)
+        val (signRight, absRight) = signAbs(right)
+        val prod = new MulOp(absLeft, absRight)
+        res.append(emitDefLo(prod))
+        val rev = new SignRevOp(prod)
+        res.append(emitDefLo(rev))
+        val signs = new XorOp(signLeft, signRight)
+        res.append(emitDefLo(signs))
+        val result = new MuxOp(signs, rev, prod)
+        res.append(emitDefLo(result))
+        res.toString
+      }
+
+      case o: MulSUOp => {
+        val res = new StringBuilder
+        val left = o.inputs(0)
+        val right = o.inputs(1)
+        val (signLeft, absLeft) = signAbs(left)
+        val prod = new MulOp(absLeft, right)
+        res.append(emitDefLo(prod))
+        val rev = new SignRevOp(prod)
+        res.append(emitDefLo(rev))
+        res.append(emitDefLo(signLeft))
+        val result = new MuxOp(signLeft, rev, prod)
+        res.append(emitDefLo(result))
+        res.toString
+      }
+
+      case o: DivSOp => {
+        val res = new StringBuilder
+        val (signA, absA) = signAbs(o.inputs(0))
+        val (signB, absB) = signAbs(o.inputs(1))
+        val quo = new DivOp(absA, absB)
+        res.append(emitDefLo(quo))
+        val quoRev = new SignRevOp(quo)
+        res.append(emitDefLo(quoRev))
+        val eqlSigns = new EqlOp(signA, signB)
+        res.append(emitDefLo(eqlSigns))
+        val result = new MuxOp(eqlSigns, quo, quoRev)
+        res.append(emitDefLo(result))
+        res.toString
+      }
+
+      case o: RemSOp => {
+        val res = new StringBuilder
+        val (signA, absA) = signAbs(o.inputs(0))
+        val (signB, absB) = signAbs(o.inputs(1))
+        val rem = new RemOp(absA, absB)
+        res.append(emitDefLo(rem))
+        val remRev = new SignRevOp(rem)
+        res.append(emitDefLo(remRev))
+        val result = new MuxOp(signA, remRev, rem)
+        res.append(emitDefLo(result))
+        res.toString
+      }
+
+      case o: RemOp => {
+        val res = new StringBuilder
+        val au = o.inputs(0)
+        val bu = o.inputs(1)
+        val div = new DivOp(au, bu)
+        res.append(emitDefLo(div))
+        val mul = new MulOp(div, bu)
+        res.append(emitDefLo(mul))
+        val result = new SubOp(au, mul)
+        res.append(emitDefLo(result))
+        res.toString
+      }
+
+      case o: ExtractOp =>
         emitTmpDec(node) +
         (if (node.inputs.length < 3 || node.width == 1) {
-          if (node.inputs(1).isLit) {
-            val value = node.inputs(1).value.toInt
+          if (node.inputs(1).isInstanceOf[Literal]) {
+            val value = node.inputs(1).asInstanceOf[Literal].value.toInt
             "  " + emitLoWordRef(node) + " = (" + emitWordRef(node.inputs(0), value/bpw) + " >> " + (value%bpw) + ") & 1;\n"
           } else if (node.inputs(0).width <= bpw) {
             "  " + emitLoWordRef(node) + " = (" + emitLoWordRef(node.inputs(0)) + " >> " + emitLoWordRef(node.inputs(1)) + ") & 1;\n"
@@ -337,7 +543,7 @@ class CppBackend extends Backend {
             block(toArray("__e", node.inputs(0)) ++ List(emitLoWordRef(node) + " = __e[" + emitLoWordRef(node.inputs(1)) + "/" + bpw + "] >> (" + emitLoWordRef(node.inputs(1)) + "%" + bpw + ") & 1"))
           }
         } else {
-          val rsh = node.inputs(2).value.toInt
+          val rsh = node.inputs(2).asInstanceOf[Literal].value.toInt
           if (rsh % bpw == 0) {
             block((0 until words(node)).map(i => emitWordRef(node, i) + " = " + emitWordRef(node.inputs(0), i + rsh/bpw))) + trunc(node)
           } else {
@@ -352,16 +558,34 @@ class CppBackend extends Backend {
           }
         })
 
-      case x: Fill =>
+      case o: FillOp => {
         // require(node.inputs(1).isLit)
-        require(node.inputs(0).width == 1)
-        emitTmpDec(node) + block((0 until words(node)).map(
-          i => emitWordRef(node, i) + " = "
-            + (if (node.inputs(0).isLit) {
-              0L - node.inputs(0).value.toInt
-            } else {
-              "-" + emitLoWordRef(node.inputs(0))
-            }))) + trunc(node)
+        if( o.width != 1) {
+          val res = new StringBuilder
+          var out: Node = null
+          var i = 0
+          var cur = o.opand
+          while ((1 << i) <= o.n) {
+            if ((o.n & (1 << i)) != 0) {
+              out = new CatOp(cur, out)
+              res.append(emitDefLo(out))
+            }
+            cur = new CatOp(cur, cur)
+            res.append(emitDefLo(cur))
+            i = i + 1
+          }
+          res.toString
+        } else {
+          require(o.inputs(0).width == 1)
+          emitTmpDec(o) + block((0 until words(o)).map(
+            i => emitWordRef(o, i) + " = "
+              + (if (o.inputs(0).isInstanceOf[Literal]) {
+                0L - o.inputs(0).asInstanceOf[Literal].value.toInt
+              } else {
+                "-" + emitLoWordRef(o.inputs(0))
+              }))) + trunc(o)
+        }
+      }
 
       case x: Clock =>
         ""
@@ -393,7 +617,7 @@ class CppBackend extends Backend {
         def shadow(w: Int): String = emitRef(reg) + "_shadow.values[" + w + "]"
         block((0 until words(reg)).map(i => shadow(i) + " = " + updateData(i)))
 
-      case x: Log2 =>
+      case x: Log2Op =>
         (emitTmpDec(x) + "  " + emitLoWordRef(x) + " = "
           + (words(x.inputs(0))-1 to 1 by -1).map(
             i => emitWordRef(x.inputs(0), i) + " != 0, "
@@ -558,7 +782,8 @@ class CppBackend extends Backend {
       w match {
         case io: Bits  =>
           if (io.dir == INPUT) {
-            res += "  " + emitRef(c) + "->" + n + " = " + emitRef(io.inputs(0)) + ";\n";
+            res += ("  " + emitRef(c) + "->" + n + " = "
+              + emitRef(io.node.inputs(0)) + ";\n");
           }
       };
     }
@@ -567,7 +792,8 @@ class CppBackend extends Backend {
       w match {
         case io: Bits =>
           if (io.dir == OUTPUT) {
-            res += "  " + emitRef(io.consumers(0)) + " = " + emitRef(c) + "->" + n + ";\n";
+            res += ("  " + emitRef(io.node.consumers(0)) + " = "
+              + emitRef(c) + "->" + n + ";\n");
           }
       };
     }
@@ -648,7 +874,7 @@ class CppBackend extends Backend {
       for (n <- Module.scanArgs ++ Module.printArgs)
         if(!c.omods.contains(n)) c.omods += n
     }
-    val vcd = new VcdBackend()
+    val vcd = new VcdTrace()
     for (m <- c.omods) {
       if(m.name != "reset") {
         if (m.isInObject) {

@@ -183,39 +183,39 @@ class VerilogBackend extends Backend {
         w match {
           case io: Bits  =>
             if (io.dir == INPUT) { // if reached, then input has consumers
-              if (io.inputs.length == 0) {
+              if (io.node.inputs.length == 0) {
                   // if(Module.saveConnectionWarnings) {
                   //   ChiselError.warning("" + io + " UNCONNECTED IN " + io.component);
                   // } removed this warning because pruneUnconnectedIOs should have picked it up
                 portDec = "//" + portDec
-              } else if (io.inputs.length > 1) {
+              } else if (io.node.inputs.length > 1) {
                   if(Module.saveConnectionWarnings) {
-                    ChiselError.warning("" + io + " CONNECTED TOO MUCH " + io.inputs.length);
+                    ChiselError.warning("" + io + " CONNECTED TOO MUCH " + io.node.inputs.length);
                   }
                 portDec = "//" + portDec
-              } else if (!c.isWalked.contains(w)){
+              } else if (!c.isWalked.contains(io.node)){
                   if(Module.saveConnectionWarnings) {
                     ChiselError.warning(" UNUSED INPUT " + io + " OF " + c + " IS REMOVED");
                   }
                 portDec = "//" + portDec
               } else {
-                portDec += emitRef(io.inputs(0));
+                portDec += emitRef(io.node.inputs(0));
               }
             } else if(io.dir == OUTPUT) {
-              if (io.consumers.length == 0) {
+              if (io.node.consumers.length == 0) {
                   // if(Module.saveConnectionWarnings) {
                   //   ChiselError.warning("" + io + " UNCONNECTED IN " + io.component + " BINDING " + c.findBinding(io));
                   // } removed this warning because pruneUnconnectedsIOs should have picked it up
                 portDec = "//" + portDec
               } else {
-                var consumer: Node = c.parent.findBinding(io);
+                var consumer: Node = c.parent.findBinding(io.node);
                 if (consumer == null) {
                   if(Module.saveConnectionWarnings) {
-                    ChiselError.warning("" + io + "(" + io.component + ") OUTPUT UNCONNECTED (" + io.consumers.length + ") IN " + c.parent);
+                    ChiselError.warning("" + io + "(" + io.component + ") OUTPUT UNCONNECTED (" + io.node.consumers.length + ") IN " + c.parent);
                   }
                   portDec = "//" + portDec
                 } else {
-                  if (io.prune)
+                  if (io.node.prune)
                     portDec = "//" + portDec + emitRef(consumer)
                   else
                     portDec += emitRef(consumer); // TODO: FIX THIS?
@@ -233,10 +233,10 @@ class VerilogBackend extends Backend {
     if (c.clocks.length > 0 || c.resets.size > 0) res += ",\n" else res += "\n"
     res += portDecs.map(_.result).reduceLeft(_ + "\n" + _)
     res += "\n  );\n";
-    if (c.wires.map(_._2.driveRand).reduceLeft(_ || _)) {
+    if (c.wires.map(_._2.node.driveRand).reduceLeft(_ || _)) {
       res += "  `ifndef SYNTHESIS\n"
       for ((n, w) <- c.wires) {
-        if (w.driveRand) {
+        if (w.node.driveRand) {
           res += "    assign " + c.name + "." + n + " = $random();\n"
         }
       }
@@ -261,60 +261,77 @@ class VerilogBackend extends Backend {
           }
         }
 
-      case x: Mux =>
-        "  assign " + emitTmp(x) + " = " + emitRef(x.inputs(0)) + " ? " + emitRef(x.inputs(1)) + " : " + emitRef(x.inputs(2)) + ";\n"
+      case x: Log2Op => {
+        val res = new StringBuilder
+        var mux = UInt(0)
+        res.append(emitDef(mux.node))
+        for (i <- 1 until x.nbits) {
+          val cond = Extract(UInt(x.opand), UInt(i))
+          res.append(emitDef(cond.node))
+          val left = UInt(i, Literal.sizeof(x.nbits-1))
+          res.append(emitDef(left.node))
+          mux = Mux(cond, left, mux)
+          res.append(emitDef(mux.node))
+        }
+        res.toString
+      }
 
-      case o: Op =>
-        val c = o.component;
-        "  assign " + emitTmp(o) + " = " +
-        (if (o.op == "##") {
-          "{" + emitRef(node.inputs(0)) + ", " + emitRef(node.inputs(1)) + "}"
-        } else if (node.inputs.length == 1) {
-          o.op + " " + emitRef(node.inputs(0))
-        } else if (o.op == "s*s" || o.op == "s%s" || o.op == "s/s") {
-          "$signed(" + emitRef(node.inputs(0)) + ") " + o.op(1) + " $signed(" + emitRef(node.inputs(1)) + ")"
-        } else if(node.isSigned) {
-          if (o.op == ">>") {
-            "$signed(" + emitRef(node.inputs(0)) + ") " + ">>>" + " " + emitRef(node.inputs(1))
-          } else {
-            "$signed(" + emitRef(node.inputs(0)) + ") " + o.op + " $signed(" + emitRef(node.inputs(1)) + ")"
-          }
-        } else {
-          emitRef(node.inputs(0)) + " " + o.op + " " + emitRef(node.inputs(1))
-        }) + ";\n"
+      case x: MuxOp =>
+        ("  assign " + emitTmp(x) + " = " + emitRef(x.inputs(0)) + " ? " + emitRef(x.inputs(1)) + " : " + emitRef(x.inputs(2)) + ";\n")
 
-      case x: Cat =>
+      case x: UnaryOp =>
+        ("  assign " + emitTmp(x) + " = " + x.opSlug + " " + emitRef(x.inputs(0)) + ";\n")
+
+      case x:BinaryOp =>
+       ("  assign " + emitTmp(x) + " = " + emitRef(x.inputs(0)) + " " + x.opSlug + " " + emitRef(x.inputs(1)) + ";\n")
+
+      case x: RightShiftSOp =>
+        ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.inputs(0)) + ") " + ">>>" + " " + emitRef(x.inputs(1)) + ";\n")
+
+
+      case x: MulSOp =>
+        ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.inputs(0)) + ") "
+          + "* $signed(" + emitRef(x.inputs(1)) + ");\n")
+
+      case x: DivSOp =>
+        (" assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.inputs(0)) + ") "
+          + "/ $signed(" + emitRef(x.inputs(1)) + ");\n")
+
+      case x: RemSOp =>
+        ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.inputs(0)) + ") "
+          + "% $signed(" + emitRef(x.inputs(1)) + ");\n")
+
+      case x: CatOp =>
         var res = "  assign " + emitTmp(node) + " = {";
         var first = true;
-        for(e <- node.inputs)
+        for(e <- x.inputs)
           res += (if(first) {first = false; ""} else ", ") + emitRef(e);
         res += "};\n";
         res
 
-      case x: Extract =>
-        node.inputs.tail.foreach(x.validateIndex)
-        if (node.inputs.length < 3) {
-          if(node.inputs(0).width > 1) {
-            "  assign " + emitTmp(node) + " = " + emitRef(node.inputs(0)) + "[" + emitRef(node.inputs(1)) + "];\n"
+      case x: ExtractOp =>
+        if (x.inputs.length < 3) {
+          if(x.inputs(0).width > 1) {
+            "  assign " + emitTmp(node) + " = " + emitRef(x.inputs(0)) + "[" + emitRef(x.inputs(1)) + "];\n"
           } else {
-            "  assign " + emitTmp(node) + " = " + emitRef(node.inputs(0)) + ";\n"
+            "  assign " + emitTmp(node) + " = " + emitRef(x.inputs(0)) + ";\n"
           }
         } else {
-          if(node.inputs(0).width > 1) {
-            "  assign " + emitTmp(node) + " = " + emitRef(node.inputs(0)) + "[" + emitRef(node.inputs(1)) + ":" + emitRef(node.inputs(2)) + "];\n"
+          if(x.inputs(0).width > 1) {
+            "  assign " + emitTmp(node) + " = " + emitRef(x.inputs(0)) + "[" + emitRef(x.inputs(1)) + ":" + emitRef(x.inputs(2)) + "];\n"
           } else {
-            "  assign " + emitTmp(node) + " = " + emitRef(node.inputs(0)) + ";\n"
+            "  assign " + emitTmp(node) + " = " + emitRef(x.inputs(0)) + ";\n"
           }
         }
 
-      case x: Fill =>
-        "  assign " + emitTmp(node) + " = {" + emitRef(node.inputs(1)) + "{" + emitRef(node.inputs(0)) + "}};\n";
+      case x: FillOp =>
+        "  assign " + emitTmp(node) + " = {" + emitRef(x.inputs(1)) + "{" + emitRef(x.inputs(0)) + "}};\n";
 
-      case ll: ListLookup[_] =>
+      case ll: ListLookup =>
         val res = new StringBuilder()
         res.append("  always @(*) begin\n" +
                    //"    " + emitRef + " = " + inputs(1).emitRef + ";\n" +
-                   "    casez (" + emitRef(node.inputs(0)) + ")" + "\n");
+                   "    casez (" + emitRef(ll.inputs(0)) + ")" + "\n");
 
         for ((addr, data) <- ll.map) {
           res.append("      " + emitRef(addr) + " : begin\n");
@@ -344,8 +361,7 @@ class VerilogBackend extends Backend {
           "    casez (" + emitRef(l.inputs(0)) + ")" + "\n";
 
         for (node <- l.map)
-          res = res +
-            "      " + emitRef(node.addr) + " : " + emitRef(l) + " = " + emitRef(node.data) + ";\n";
+          res = res + "      " + emitRef(node._1) + " : " + emitRef(l) + " = " + emitRef(node._2) + ";\n";
         res = res +
           "    endcase\n" +
           "  end\n";
@@ -411,7 +427,7 @@ class VerilogBackend extends Backend {
         } else {
           ""
         }
-      case x: ListLookupRef[_] =>
+      case x: ListLookupRef =>
         "  reg" + emitSigned(node) + "[" + (node.width-1) + ":0] " + emitRef(node) + ";\n";
 
       case x: Lookup =>
@@ -420,12 +436,6 @@ class VerilogBackend extends Backend {
       case x: Sprintf =>
         "  reg" + emitSigned(node) + "[" + (node.width-1) + ":0] " + emitRef(node) + ";\n";
 
-      case x: ListNode =>
-        ""
-      case x: MapNode =>
-        ""
-      case x: LookupMap =>
-        ""
       case x: Literal =>
         ""
 
@@ -569,7 +579,7 @@ class VerilogBackend extends Backend {
       case reg: Reg =>
         if(reg.isMemOutput) {
             ""
-        } else if(reg.isEnable && (reg.enableSignal.litOf == null || reg.enableSignal.litOf.value != 1)){
+        } else if(reg.isEnable && (reg.enableSignal.isInstanceOf[Literal] || reg.enableSignal.asInstanceOf[Literal].value != 1)){
           if(reg.isReset){
             "    if(" + emitRef(reg.inputs.last) + ") begin\n" +
             "      " + emitRef(reg) + " <= " + emitRef(reg.init) + ";\n" +
@@ -648,13 +658,13 @@ class VerilogBackend extends Backend {
       // if(first && !hasReg) {first = false; nl = "\n"} else nl = ",\n";
       w match {
         case io: Bits => {
-          val prune = if (io.prune && c != Module.topComponent) "//" else ""
+          val prune = if (io.node.prune && c != Module.topComponent) "//" else ""
           if (io.dir == INPUT) {
             ports += new StringBuilder(nl + "    " + prune + "input " + 
-                                       emitSigned(io) + emitWidth(io) + " " + emitRef(io));
+                                       emitSigned(io.node) + emitWidth(io.node) + " " + emitRef(io.node));
           } else if(io.dir == OUTPUT) {
             ports += new StringBuilder(nl + "    " + prune + "output" + 
-                                       emitSigned(io) + emitWidth(io) + " " + emitRef(io));
+                                       emitSigned(io.node) + emitWidth(io.node) + " " + emitRef(io.node));
           }
         }
       };

@@ -52,7 +52,7 @@ class when (prevCond: Bool) {
   }
   def otherwise (block: => Unit) {
     val cond = !prevCond
-    if (Node.conds.length == 1) cond.canBeUsedAsDefault = true
+    if (Node.conds.length == 1) cond.node.canBeUsedAsDefault = true
     when.execWhen(cond){ block }
   }
 }

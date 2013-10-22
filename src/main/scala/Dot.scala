@@ -57,8 +57,6 @@ class DotBackend extends Backend {
     } else {
       m match {
         case x: Literal  => false;
-        case x: MapNode  => false;
-        case x: ListNode => false;
         case _           => true;
       }
     }
@@ -67,7 +65,7 @@ class DotBackend extends Backend {
 
   private def asValidLabel( node: Node ): String = {
     node match {
-      case operator: Op => if (operator.op == "") "?" else operator.op;
+      case op: Op => op.name;
       case _             => {
         val typeName = node.getClass.getName.substring(7)
         node.name + ":" + typeName
@@ -107,7 +105,7 @@ class DotBackend extends Backend {
             label += "(";
             for (in <- m.inputs) {
               if (i != 0) label += ", ";
-              label += (if (in.isLit) emitRef(in) else "_");
+              label += (if (in.isInstanceOf[Literal]) emitRef(in) else "_");
               i += 1;
             }
             label += ")";
@@ -127,7 +125,7 @@ class DotBackend extends Backend {
         for (in <- m.inputs) {
           if (isDottable(m) && isDottable(in)) {
             val edge = (emitRef(in) + " -> " + emitRef(m)
-              + "[label=\"" + in.width_ + "\"];\n")
+              + "[label=\"" + in.width + "\"];\n")
             /* If the both ends of an edge are on either side of a component
              boundary, we must add it at the upper level otherwise graphviz
              will incorrectly draw the input node into the cluster. */
@@ -152,10 +150,13 @@ class DotBackend extends Backend {
     val out_cd = createOutputFile(c.name + "_c.dot");
     out_cd.write("digraph TopTop {\n");
     out_cd.write("rankdir = LR;\n");
+
     def genNum: Int = { gn += 1; gn };
+
     def dumpComponent (c: Module): Unit = {
       out_cd.write("subgraph cluster" + c.name + "{\n");
       out_cd.write("label = \"" + c.name + "\";\n");
+
       def dumpIo (n: String, d: Data): Unit = {
         d match {
           case b: Bundle =>
@@ -165,11 +166,12 @@ class DotBackend extends Backend {
             for ((cn, cd) <- b.elements)
               dumpIo(cn, cd);
             out_cd.write("}\n");
-          case o =>
-            out_cd.write(emitRef(d) + "[label=\"" + n + "\"];\n");
-            for (in <- d.inputs)
+          case bits: Bits =>
+            out_cd.write(emitRef(bits.node) + "[label=\"" + n + "\"];\n");
+            for (in <- bits.node.inputs)
               if (isDottable(in)) {
-                out_cd.write(emitRef(in) + " -> " + emitRef(d) + "[label=\"" + in.width_ + "\"];\n");
+                out_cd.write(emitRef(in) + " -> "
+                  + emitRef(bits.node) + "[label=\"" + in.width + "\"];\n");
               }
         }
       }
