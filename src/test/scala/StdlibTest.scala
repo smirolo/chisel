@@ -178,6 +178,7 @@ class StdlibSuite extends AssertionsForJUnit {
 
   /** Multiply an unsigned number by signed number */
   @Test def testMulUS() {
+    try{
     class MulUS extends Module {
       val io = new Bundle {
         val x = UInt(INPUT, 32)
@@ -186,9 +187,12 @@ class StdlibSuite extends AssertionsForJUnit {
       }
       io.z := io.x * io.y
     }
-    chiselMain(Array[String]("--v",
-      "--targetDir", tmpdir.getRoot().toString()),
+    chiselMain(Array[String]("--v"),
+//      "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new MulUS()))
+    } catch {
+      case e => { println("XXX exception: "); e.printStackTrace }
+    }
     assertFile(tmpdir.getRoot() + "/StdlibSuite_MulUS_1.v",
 """module StdlibSuite_MulUS_1(
     input [31:0] io_x,
