@@ -30,7 +30,6 @@
 
 package Chisel
 
-import Node._
 import ChiselError._
 
 /** *Data* is part of the *Node* Composite Pattern class hierarchy.
@@ -45,7 +44,13 @@ import ChiselError._
   while executing the Scala program. These data types are used to create
   Nodes through dynamic dispatch.
   */
-abstract class Data(var node: Node = null) extends nameable {
+abstract class Data extends nameable {
+
+  /** Set to the line on which the instance is declared. */
+  val line: StackTraceElement = (
+    findFirstUserLine(Thread.currentThread().getStackTrace)
+      getOrElse Thread.currentThread().getStackTrace()(0))
+
 
   /* Component this AST Data Type belongs to. We use it
    in the <> operator to bind nodes. */
@@ -53,7 +58,7 @@ abstract class Data(var node: Node = null) extends nameable {
 
   def nameIt(name: String) {}
 
-  def getWidth(): Int = node.getWidth()
+  def getWidth(): Int
 
   // 2 following: Interface required by Vec:
   def ===(right: Data): Bool = {
@@ -68,6 +73,8 @@ abstract class Data(var node: Node = null) extends nameable {
     ChiselError.error("toBits not defined on " + this.getClass)
     UInt()
   }
+
+  def fromBits( bits: Bits ): this.type
 
 /*
   def toBool(): Bool = {

@@ -29,11 +29,11 @@
 */
 
 package Chisel
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Stack
 import scala.collection.mutable.{Queue=>ScalaQueue}
-import Literal._
-import Node._
+
 import ChiselError._
 
 
@@ -129,14 +129,14 @@ object chiselMain {
       val c = gen();
       if (scanner != null) {
         val s = scanner(c);
-        Module.scanArgs  ++= s.args.map{ _.node };
-        for (a <- s.args) a.node.isScanArg = true
+        Module.scanArgs  ++= s.args.map{ _.toBits.node };
+        for (a <- s.args) a.toBits.node.isScanArg = true
         Module.scanFormat  = s.format;
       }
       if (printer != null) {
         val p = printer(c);
-        Module.printArgs   ++= p.args.map{ _.node };
-        for(a <- p.args) a.node.isPrintArg = true
+        Module.printArgs   ++= p.args.map{ _.toBits.node };
+        for(a <- p.args) a.toBits.node.isPrintArg = true
         Module.printFormat   = p.format;
       }
       if (ftester != null) {
@@ -177,6 +177,4 @@ trait nameable {
 }
 
 
-trait Delay {
-}
 

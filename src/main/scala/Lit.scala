@@ -39,24 +39,24 @@ import ChiselError._
 
 /* Factory for literal values to be used by Bits and SInt factories. */
 object Lit {
-  def apply[T <: Bits](n: String, width: Int = -1)(implicit m: Manifest[T]): T = {
+  def apply[T <: Bits](n: String, width: Int = -1)(implicit m: reflect.ClassTag[T]): T = {
     makeLit(Literal(n, width))
   }
 
-  def apply[T <: Bits](n: String, base: Char, width: Int = -1)(implicit m: Manifest[T]): T = {
+  def apply[T <: Bits](n: String, base: Char, width: Int = -1)(implicit m: reflect.ClassTag[T]): T = {
     makeLit(Literal(n, base, width))
   }
 
-  def apply[T <: Bits](n: BigInt)(implicit m: Manifest[T]): T = {
+  def apply[T <: Bits](n: BigInt)(implicit m: reflect.ClassTag[T]): T = {
     makeLit(Literal(n))
   }
 
-  def apply[T <: Bits](n: BigInt, width: Int)(implicit m: Manifest[T]): T = {
+  def apply[T <: Bits](n: BigInt, width: Int)(implicit m: reflect.ClassTag[T]): T = {
     makeLit(Literal(n, width))
   }
 
-  def makeLit[T <: Bits](x: Literal)(implicit m: Manifest[T]): T = {
-    val result = m.erasure.newInstance.asInstanceOf[T]
+  def makeLit[T <: Bits](x: Literal)(implicit m: reflect.ClassTag[T]): T = {
+    val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = x
     result
   }
@@ -272,7 +272,7 @@ class Literal extends Node {
   override def toString: String = name;
   override def isInVCD: Boolean = false
 
-  override def inferWidth(): Width = new FixedWidth(-1)
+  override def inferWidth(): Width = new FixedWidth(width)
 
   def d (x: BigInt): Literal = Literal(x, value.toInt)
 }

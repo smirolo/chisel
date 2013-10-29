@@ -32,7 +32,6 @@ package Chisel
 
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.ArrayBuffer
-import Node._
 import ChiselError._
 
 class Assert(condArg: Node, val message: String) extends Node {
@@ -95,8 +94,8 @@ class PrintfBase(formatIn: String, argsIn: Seq[Node]) extends Node {
 
 class Sprintf(formatIn: String, argsIn: Seq[Node]) extends PrintfBase(formatIn, argsIn)
 
-class Printf(condIn: Bool, formatIn: String, argsIn: Seq[Node]) extends PrintfBase(formatIn, argsIn) {
-  inputs += condIn.node
+class Printf(condIn: Node, formatIn: String, argsIn: Seq[Node]) extends PrintfBase(formatIn, argsIn) {
+  inputs += condIn
   override def args: ArrayBuffer[Node] = inputs.init
   def cond: Node = inputs.last
 }

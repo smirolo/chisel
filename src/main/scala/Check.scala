@@ -30,45 +30,26 @@
 
 package Chisel
 
-/** This Node represents conditional assignments.
 
-  It is a little special in that it can only be fuly evaluated
-  at the elaboration phase.
-  */
-class CondAssign extends Node {
-  // XXX Shouldn't be Node
-  def inferWidth(): Width = new FixedWidth(1)
+object VerifyMuxes {
 
-  var updates = new collection.mutable.ListBuffer[(Node, Node)];
-
-  private def genMuxes(default: Node, others: Seq[(Node, Node)]): Unit = {
-    val update = others.foldLeft(default)((v, u) => new MuxOp(u._1, u._2, v))
-    if (inputs.isEmpty) inputs += update else inputs(0) = update
-  }
-
-  def genMuxes(): Unit = {
-    if (inputs.length == 0 || inputs(0) == null) {
-      ChiselError.error({"NO UPDATES ON " + this}, this.line)
-    } else {
-      val (topCond, topValue) = updates.head
-      val (lastCond, lastValue) = updates.last
-      if (!topCond.boundToTrue && !lastCond.canBeUsedAsDefault) {
-        ChiselError.error(
-          {"NO DEFAULT SPECIFIED FOR WIRE: " + this + " in component " + this.component.getClass},
-          this.line)
-      } else {
-        if (topCond.boundToTrue)
-          genMuxes(topValue, updates.toList.tail)
-        else if (lastCond.canBeUsedAsDefault)
-          genMuxes(lastValue, updates)
-      }
+  def apply( node: Node): Boolean = {
+    node match {
+      case mux: MuxOp =>
+        if( mux.inputs.length != 3 ) {
+          ChiselError.error("Mux " + mux.name + " has "
+            + mux.inputs.length + " inputs (3 were expected).")
+          false
+        }
+        if( mux.inputs.length > 0 && mux.inputs(0).width != 1 ) {
+          /* XXX If the input comes from a BlackBox, should we accept
+           non 1-bit selector or create an ExtractOp ? */
+          ChiselError.error("Mux " + mux.name + " has "
+            + mux.inputs(0).width + "-bit selector (1-bit selector expected)")
+          false
+        }
     }
+    true
   }
 
-  /** Add another update path. */
-  def append( cond: Node, value: Node ) {
-    updates += ((cond, value))
-  }
-
-  Module.procs += this;
 }

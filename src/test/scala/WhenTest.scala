@@ -126,9 +126,9 @@ endmodule
   wire T2;
 
   assign io_out = T0;
-  assign T0 = T2 ? io_in1 : T1;
-  assign T1 = io_in0 ? io_in0 : 1'h0/* 0*/;
-  assign T2 = io_in0 && io_in1;
+  assign T0 = T1 ? io_in1 : T2;
+  assign T1 = io_in0 && io_in1;
+  assign T2 = io_in0 ? io_in0 : 1'h0/* 0*/;
 endmodule
 
 """)
@@ -137,6 +137,8 @@ endmodule
   /** When statement with elsewhen and otherwise clause.
     */
   @Test def testWhenClass() {
+    println("\ntestWhenClass:")
+
     class WhenClassComp extends Module {
       val io = new Bundle {
         val in0 = Bool(INPUT)
@@ -268,6 +270,8 @@ endmodule
   /** Unless statement with elsewhen and otherwise clause.
     */
   @Test def testUnlessClass() {
+    println("\ntestUnlessClass:")
+
     class UnlessClassComp extends Module {
       val io = new Bundle {
         val in0 = Bool(INPUT)

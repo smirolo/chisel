@@ -39,18 +39,74 @@ object Bool {
 
   def apply(x: Boolean): Bool = Bool(Literal(if(x) 1 else 0, 1))
 
-  def apply(dir: IODirection = NODIRECTION): Bool
-    = new Bool(new IOBound(dir, 1))
+  def apply(dir: IODirection = NODIRECTION): Bool = {
+    val res = new Bool()
+    res.node = new IOBound(dir, 1)
+    res
+  }
 }
 
 
-class Bool(node: Node = null) extends UInt(node) {
+class Bool extends UInt {
 
   def :=(src: Bool): Unit = {
     this procAssign src.node
   }
 
-  def && (right: Bool): Bool = LogicalAndOp(this, right)
-  def || (right: Bool): Bool = LogicalOrOp(this, right)
+  def && (right: Bool): Bool = LogicalAnd(this, right)
+  def || (right: Bool): Bool = LogicalOr(this, right)
 
+}
+
+
+object LogicalAnd {
+  def apply( left: Bits, right: Bits): Bool = {
+    if(Module.searchAndMap
+      && Module.chiselAndMap.contains((left, right))) {
+      Module.chiselAndMap((left, right))
+    }
+    val op = {
+      if (left.isConst) {
+        if( left.node.asInstanceOf[Literal].value > 0 ) {
+          right.node
+        } else {
+          left.node // alias to false
+        }
+      } else if( right.isConst ) {
+        if( right.node.asInstanceOf[Literal].value > 0 ) {
+          left.node
+        } else {
+          right.node // alias to true
+        }
+      } else {
+        new LogicalAndOp(left.node, right.node)
+      }
+    }
+    val result = Bool(op)
+    if(Module.searchAndMap && !Module.chiselAndMap.contains((left, right))) {
+      Module.chiselAndMap += ((left, right) -> result)
+    }
+    result
+  }
+}
+
+object LogicalOr {
+  def apply( left: Bits, right: Bits): Bool = {
+    Bool(
+      if (left.isConst) {
+        if( left.node.asInstanceOf[Literal].value > 0 ) {
+          left.node // alias to true
+        } else {
+          right.node
+        }
+      } else if( right.isConst ) {
+        if( right.node.asInstanceOf[Literal].value > 0 ) {
+          right.node // alias to true
+        } else {
+          left.node
+        }
+      } else {
+        new LogicalOrOp(left.node, right.node)
+      })
+  }
 }

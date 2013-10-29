@@ -29,15 +29,20 @@
 */
 
 package Chisel
-import Node._
 
 trait IODirection;
 
-object INPUT extends IODirection;
+object INPUT extends IODirection {
+  override def toString: String = "INPUT"
+}
 
-object OUTPUT extends IODirection;
+object OUTPUT extends IODirection {
+  override def toString: String = "OUTPUT"
+}
 
-object NODIRECTION extends IODirection;
+object NODIRECTION extends IODirection {
+  override def toString: String = "NODIRECTION"
+}
 
 
 // used for component to component connections
@@ -72,10 +77,11 @@ object Binding {
 */
 class IOBound(var dir: IODirection = NODIRECTION,
               widthP: Int = -1,
-              opand: Node = null)
-    extends UnaryOp(opand) {
+              opandNode: Node = null) extends Node {
 
+  if( opandNode != null ) this.inputs.append(opandNode)
   width = widthP
+
 
   override def asDirectionless(): this.type = {
     dir = NODIRECTION
@@ -120,7 +126,7 @@ class IOBound(var dir: IODirection = NODIRECTION,
 (if (dir == INPUT) "INPUT, "
         else if (dir == OUTPUT) "OUTPUT, " else "")
  */
-    "IOBound(" + dir + "," + width + "," + (
-      if( inputs.length > 0 ) target else "") + ")"
+    "IOBound(" + dir.toString + "," + width + (
+      if( inputs.length > 0 ) ("," + target) else "") + ")"
   }
 }

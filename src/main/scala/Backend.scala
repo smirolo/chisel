@@ -29,9 +29,7 @@
 */
 
 package Chisel
-import Node._
-import Reg._
-import ChiselError._
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.{Queue=>ScalaQueue}
 import scala.collection.mutable.Stack
@@ -42,6 +40,9 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PrintStream
+
+import Reg._
+import ChiselError._
 
 object Backend {
   var moduleNamePrefix = ""
@@ -63,6 +64,10 @@ abstract class Backend {
       res += "  ";
     res
   }
+
+  var nindex = 0
+  def emitIndex : Int = { val res = nindex; nindex = nindex + 1; res }
+
 
   /** Ensures a directory *dir* exists on the filesystem. */
   def ensureDir(dir: String): String = {
@@ -86,8 +91,8 @@ abstract class Backend {
     // Name all nodes at this level
     root.io.nameIt("io");
     val nameSpace = new HashSet[String];
-    /* We are going through all declarations, which can return Nodes,
-     ArrayBuffer[Node], BlackBox and Modules.
+    /* We are going through all declarations, which can return Datas,
+     ArrayBuffer[Data], BlackBox and Modules.
      Since we call invoke() to get a proper instance of the correct type,
      we have to insure the method is accessible, thus all fields
      that will generate C++ or Verilog code must be made public. */
@@ -98,24 +103,24 @@ abstract class Backend {
         && isPublic(m.getModifiers()) && !(Module.keywords contains name)) {
         val o = m.invoke(root);
         o match {
-         case node: Node => {
+         case node: Data => {
            /* XXX It seems to always be true. How can name be empty? */
-           if ((node.isTypeNode || name != ""
+           if ((name != ""
              || node.name == null || (node.name == "" && !node.named))) {
              node.nameIt(asValidName(name));
            }
            nameSpace += node.name;
          }
          case buf: ArrayBuffer[_] => {
-           /* We would prefer to match for ArrayBuffer[Node] but that's
+           /* We would prefer to match for ArrayBuffer[Data] but that's
             impossible because of JVM constraints which lead to type erasure.
             XXX Using Seq instead of ArrayBuffer will pick up members defined
             in Module that are solely there for implementation purposes. */
-           if(!buf.isEmpty && buf.head.isInstanceOf[Node]){
-             val nodebuf = buf.asInstanceOf[Seq[Node]];
+           if(!buf.isEmpty && buf.head.isInstanceOf[Data]){
+             val nodebuf = buf.asInstanceOf[Seq[Data]];
              var i = 0;
              for(elm <- nodebuf){
-               if( elm.isTypeNode || elm.name == null || elm.name.isEmpty ) {
+               if( elm.name == null || elm.name.isEmpty ) {
                  /* XXX This code is sensitive to when Bundle.nameIt is called.
                   Whether it is called late (elm.name is empty) or we override
                   any previous name that could have been infered,
@@ -181,7 +186,7 @@ abstract class Backend {
 
     for (bind <- root.bindings) {
       var genName = if (bind.target.name == null || bind.target.name.length() == 0) "" else bind.target.component.name + "_" + bind.target.name;
-      if(nameSpace.contains(genName)) genName += ("_" + bind.emitIndex);
+      if(nameSpace.contains(genName)) genName += ("_" + emitIndex);
       bind.name = asValidName(genName); // Not using nameIt to avoid override
       bind.named = true;
     }
@@ -194,16 +199,9 @@ abstract class Backend {
   }
 
   def nameAll(root: Module) {
+    nindex = 0
     root.name = extractClassName(root);
     nameChildren(root);
-    for( node <- Module.nodes ) {
-      if( (node.nameHolder != null && !node.nameHolder.name.isEmpty)
-        && !node.named && !node.isInstanceOf[Literal] ){
-        node.name = node.nameHolder.name; // Not using nameIt to avoid override
-        node.named = node.nameHolder.named;
-        node.nameHolder.name = "";
-      }
-    }
   }
 
   def fullyQualifiedName( m: Node ): String = {
@@ -230,14 +228,12 @@ abstract class Backend {
 
   def emitRef(node: Node): String = {
     node match {
-      case r: Reg =>
-        if (r.name == "") "R" + r.emitIndex else r.name
+      case r: RegDelay =>
+        if (r.name == "") r.name = "R" + emitIndex
+        r.name
       case _ =>
-        if(node.name == "") {
-          "T" + node.emitIndex
-        } else {
-          node.name
-        }
+        if(node.name == "") node.name = "T" + emitIndex
+        node.name
     }
   }
 
@@ -307,6 +303,7 @@ abstract class Backend {
       if (!node.component.nodes.contains(node))
         node.component.nodes += node
       for (input <- node.inputs) {
+        println("XXX [collectNodesIntoComp] " + node)
         if(!walked.contains(input)) {
           if( input.component == null ) {
             input.component = curComp
@@ -326,8 +323,8 @@ abstract class Backend {
   }
 
   def pruneUnconnectedIOs(m: Module) {
-    val inputs = m.io.flatten.filter(x => x._2.isInstanceOf[IOBound] && x._2.asInstanceOf[IOBound].dir == INPUT)
-    val outputs = m.io.flatten.filter(x => x._2.isInstanceOf[IOBound] && x._2.asInstanceOf[IOBound].dir == OUTPUT)
+    val inputs = m.io.flatten.filter(x => x._2.node.isInstanceOf[IOBound] && x._2.node.asInstanceOf[IOBound].dir == INPUT)
+    val outputs = m.io.flatten.filter(x => x._2.node.isInstanceOf[IOBound] && x._2.node.asInstanceOf[IOBound].dir == OUTPUT)
 
     for ((name, i) <- inputs) {
       val node = i.node
@@ -349,8 +346,9 @@ abstract class Backend {
       if (node.inputs.length == 0) {
         if (node.consumers.length > 0) {
           if (Module.warnOutputs)
-            ChiselError.warning({"UNCONNETED OUTPUT " + emitRef(node) + " in component " + node.component + 
-                                 " has consumers on line " + node.consumers(0).line})
+            /* XXX fix line
+            ChiselError.warning({"UNCONNETED OUTPUT " + emitRef(node) + " in component " + node.component + " has consumers on line " + node.consumers(0).line})
+             */
           node.driveRand = true
         } else {
           if (Module.warnOutputs)
@@ -498,7 +496,8 @@ abstract class Backend {
     for (c <- Module.components)
       c.markComponent();
     // XXX This will create nodes after the tree is traversed!
-    c.genAllMuxes;
+    // XXX c.genAllMuxes;
+    // XXX verify all wires are assigned and have default values.
     transform(c, preElaborateTransforms)
     Module.components.foreach(_.postMarkNet(0));
     ChiselError.info("// COMPILING " + c + "(" + c.children.length + ")");
@@ -514,15 +513,14 @@ abstract class Backend {
     gatherClocksAndResets
     connectResets
 
-    ChiselError.info("started inference")
-    val nbOuterLoops = c.inferAll();
-    ChiselError.info("finished inference (" + nbOuterLoops + ")")
+    ChiselError.info("started width inference")
+    val accessibleNodes = new ArrayBuffer[Node]
+    GraphWalker.tarjan(c.outputs(), {node => node.inferWidth().forward(node)})
+    ChiselError.info("finished width inference")
     ChiselError.info("start width checking")
     c.forceMatchingWidths;
     ChiselError.info("finished width checking")
     ChiselError.info("started flattenning")
-    val nbNodes = c.removeTypeNodes()
-    ChiselError.info("finished flattening (" + nbNodes + ")")
     ChiselError.checkpoint()
 
     /* *collectNodesIntoComp* associates components to nodes that were
@@ -549,7 +547,7 @@ abstract class Backend {
     val clkDomainWalkedNodes = new ArrayBuffer[Node]
     for (comp <- Module.sortedComps)
       for (node <- comp.nodes)
-        if (node.isInstanceOf[Reg])
+        if (node.isInstanceOf[RegDelay])
             createClkDomain(node, clkDomainWalkedNodes)
     ChiselError.checkpoint()
 

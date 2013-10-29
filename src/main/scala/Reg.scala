@@ -29,7 +29,7 @@
 */
 
 package Chisel
-import Node._
+
 import Reg._
 import ChiselError._
 import scala.reflect._
@@ -68,10 +68,7 @@ object Reg {
   }
 */
   def validateGen[T <: Data](gen: => T) {
-    for ((n, i) <- gen.flatten)
-      if (!i.node.inputs.isEmpty || !i.node.asInstanceOf[CondAssign].updates.isEmpty) {
-        throwException("Invalid Type Specifier for Reg")
-      }
+//XXX        throwException("Invalid Type Specifier for Reg")
   }
 
   /** *type_out* defines the data type of the register when it is read.
@@ -104,29 +101,26 @@ object Reg {
     // asOutput flip the direction and returns this.
     val res = gen.asOutput
 
-    val reg =
-      if(init != null) {
-        for((((res_n, res_i), (data_n, data_i)), (rval_n, rval_i))
-          <- res.flatten zip d zip init.flatten) {
-          assert(rval_i.getWidth > 0,
-            {ChiselError.error("Negative width to wire " + res_i)})
-          val reg = new Reg()
-          reg.inputs.append(data_i.node)
-          reg.inputs.append(rval_i.node)
-          // make output
-          reg.isReset = true
-        }
-        new Reg()
-      } else {
-        for(((res_n, res_i), (data_n, data_i)) <- res.flatten zip d) {
-          val w = res_i.getWidth
-          val reg = new Reg()
-          reg.inputs.append(data_i.node)
-          reg.clock = clock
-        }
-        new Reg()
+    if(init != null) {
+      for((((res_n, res_i), (data_n, data_i)), (rval_n, rval_i))
+        <- res.flatten zip d zip init.flatten) {
+        assert(rval_i.getWidth > 0,
+          {ChiselError.error("Negative width to wire " + res_i)})
+        val reg = new RegDelay()
+        reg.inputs.append(data_i.node)
+        reg.inputs.append(rval_i.node)
+        // make output
+        reg.isReset = true
+        res_i.node = reg
       }
-    res.node = reg
+    } else {
+      for(((res_n, res_i), (data_n, data_i)) <- res.flatten zip d) {
+        val reg = new RegDelay()
+        reg.inputs.append(data_i.node)
+        reg.clock = clock
+        res_i.node = reg
+      }
+    }
     res
   }
 
@@ -152,59 +146,27 @@ object RegInit {
 
 /** XXX Should extends Data or up. we are looking for an easy way to compile
 here. */
-class Reg extends CondAssign with Delay {
-  def next: Node = inputs(0);
-  def init: Node  = inputs(1);
-  def enableSignal: Node = inputs(enableIndex);
-  var enableIndex = 0;
-  var isReset = false
-  var isEnable = false;
-  def isUpdate: Boolean = !(next == null);
-  def update (x: Node) { inputs(0) = x };
+class Reg extends Bits {
+  def isUpdate: Boolean = !(node.asInstanceOf[RegDelay].next == null);
+ /* XXX def update (x: Node) { inputs(0) = x }; */
   var assigned = false;
   var enable = Bool(false);
 
-  override def isReg: Boolean = true;
+/* XXX   override def isReg: Boolean = true; */
 
-  def procAssign(src: Node) {
-    if (assigned) {
-      ChiselError.error("reassignment to Reg");
-    }
-    val cond = Bool(Node.genCond())
-    if (conds.length >= 1) {
-      isEnable = true
+  override def procAssign(src: Node) {
+    super.procAssign(src)
+    val cond = Bool(Module.scope.genCond())
+    if (Module.scope.conds.length >= 1) {
+      node.asInstanceOf[RegDelay].isEnable = true
       enable = enable || cond;
     }
-    updates += ((cond.node, src))
   }
 
-/* XXX deprecated
-  override def genMuxes(default: Node): Unit = {
-    if(isMemOutput) {
-      inputs(0) = updates(0)._2
-    } else if(isEnable && Module.backend.isInstanceOf[VerilogBackend]) {
-      // hack to force the muxes to match the Reg's width:
-      // the intent is u = updates.head._2
-      genMuxes(updates.head._2, updates.toList.tail)
-      inputs += enable;
-      enableIndex = inputs.length - 1;
-    } else {
-      super.genMuxes(default)
-    }
-  }
- */
 
   def nameOpt: String = if (name.length > 0) name else "REG"
   override def toString: String = {
     "REG(" + nameOpt + ")"
-  }
-
-  override def assign(src: Node) {
-    if(assigned || inputs(0) != null) {
-      ChiselError.error("reassignment to Reg");
-    } else {
-      assigned = true; super.assign(src)
-    }
   }
 
 /* XXX deprecated

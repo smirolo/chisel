@@ -29,13 +29,13 @@
 */
 
 package Chisel
-import Node._
+
 import scala.math._
 
 
 object MuxLookup {
   def apply[S <: UInt, T <: Bits](key: S, default: T, mapping: Seq[(S, T)])
-    (implicit m: Manifest[T]): T
+    (implicit m: reflect.ClassTag[T]): T
   = {
     var res = default;
     for ((k, v) <- mapping.reverse)
@@ -47,7 +47,7 @@ object MuxLookup {
 
 object MuxCase {
   def apply[T <: Bits](default: T, mapping: Seq[(Bool, T)])
-    (implicit m: Manifest[T]): T = {
+    (implicit m: reflect.ClassTag[T]): T = {
     var res = default;
     for ((t, v) <- mapping.reverse){
       res = Mux(t, v, res);
@@ -58,45 +58,45 @@ object MuxCase {
 
 
 object Mux {
-  def apply[T <: Data](t: Bool, c: T, a: T)(implicit m: Manifest[T]): T = {
+  def apply[T <: Data](t: Bool, c: T, a: T)(implicit m: reflect.ClassTag[T]): T = {
     val op =
       if( t.node.isInstanceOf[Literal] ) {
-        if( t.node.asInstanceOf[Literal].value == 0 ) a.node else c.node
-      } else if( c.node.isInstanceOf[Literal] && a.node.isInstanceOf[Literal]) {
-        if (c.node.asInstanceOf[Literal].value
-          == a.node.asInstanceOf[Literal].value) {
-          c.node
-        } else if (c.node.asInstanceOf[Literal].value == 1
-          && a.asInstanceOf[Literal].value == 0) {
+        if( t.node.asInstanceOf[Literal].value == 0 ) a.toBits.node else c.toBits.node
+      } else if( c.toBits.node.isInstanceOf[Literal] && a.toBits.node.isInstanceOf[Literal]) {
+        if (c.toBits.node.asInstanceOf[Literal].value
+          == a.toBits.node.asInstanceOf[Literal].value) {
+          c.toBits.node
+        } else if (c.toBits.node.asInstanceOf[Literal].value == 1
+          && a.toBits.node.asInstanceOf[Literal].value == 0) {
           /* special case where we can use the cond itself. */
-          if(c.node.width == 1 && a.node.width == 1) {
-            t.node
+          if(c.toBits.node.width == 1 && a.toBits.node.width == 1) {
+            t.toBits.node
           } else {
             new CatOp(new FillOp(Literal(0,1),
-              max(c.node.width-1, a.node.width-1)), t.node)
+              max(c.toBits.node.width-1, a.toBits.node.width-1)), t.node)
           }
-        } else if (c.node.asInstanceOf[Literal].value == 0
-          && a.node.asInstanceOf[Literal].value == 1) {
+        } else if (c.toBits.node.asInstanceOf[Literal].value == 0
+          && a.toBits.node.asInstanceOf[Literal].value == 1) {
           /* special case where we can use the cond itself. */
-          if(c.node.width == 1 && a.node.width == 1) {
+          if(c.toBits.node.width == 1 && a.toBits.node.width == 1) {
             new BitwiseRevOp(t.node)
           } else {
             new CatOp(new FillOp(Literal(0,1),
-              max(c.node.width-1, a.node.width-1)),
+              max(c.toBits.node.width-1, a.toBits.node.width-1)),
               new BitwiseRevOp(t.node))
           }
         } else {
-          new MuxOp(t.node, c.node, a.node)
+          new MuxOp(t.node, c.toBits.node, a.toBits.node)
         }
-      } else if (a.node.isInstanceOf[MuxOp]
-        && c.node.clearlyEquals(a.node.inputs(1))) {
+      } else if (a.toBits.node.isInstanceOf[MuxOp]
+        && c.toBits.node.clearlyEquals(a.toBits.node.inputs(1))) {
         new MuxOp(new LogicalOrOp(
-          t.node, a.node.inputs(0)), c.node, a.node.inputs(2))
+          t.node, a.toBits.node.inputs(0)), c.toBits.node, a.toBits.node.inputs(2))
       } else {
-        new MuxOp(t.node, c.node, a.node)
+        new MuxOp(t.node, c.toBits.node, a.toBits.node)
       }
-    val result = m.erasure.newInstance.asInstanceOf[T]
-    result.node = op
+    val result = m.runtimeClass.newInstance.asInstanceOf[T]
+    result.fromBits(UInt(op))
     result
   }
 }

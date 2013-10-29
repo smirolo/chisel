@@ -39,9 +39,6 @@ import scala.collection.mutable.BitSet
 import java.lang.reflect.Modifier._
 import scala.sys.process._
 import scala.math.max;
-import Node._
-import Literal._
-import Bundle._
 import ChiselError._
 import Module._
 
@@ -50,6 +47,14 @@ object Module {
    have no arguments yet should not be used to generate C++ or Verilog code. */
   val keywords = HashSet[String]("test")
 
+  var scope: Scope = null
+/*
+object Node {
+  def sprintf(message: String, args: Node*): Bits = {
+    UInt(new Sprintf(message, args))
+  }
+}
+ */
   var warnInputs = false
   var warnOutputs = false
   var saveWidthWarnings = false
@@ -81,7 +86,6 @@ object Module {
   var topComponent: Module = null;
   val components = ArrayBuffer[Module]();
   var sortedComps: ArrayBuffer[Module] = null
-  val procs = ArrayBuffer[CondAssign]();
   val resetList = ArrayBuffer[Node]();
   val muxes = ArrayBuffer[Node]();
   val nodes = ArrayBuffer[Node]()
@@ -124,6 +128,7 @@ object Module {
 
   def initChisel () {
     ChiselError.clear();
+    Module.scope = new Scope()
     warnInputs = false
     warnOutputs = false
     saveWidthWarnings = false
@@ -149,7 +154,6 @@ object Module {
     stackIndent = 0;
     printfs.clear();
     printStackStruct.clear();
-    procs.clear();
     resetList.clear()
     muxes.clear();
     blackboxes.clear();
@@ -175,13 +179,6 @@ object Module {
 
     /* Re-initialize global variables defined in object Node {} */
     nodes.clear()
-    clk = UInt(INPUT, 1).node
-    clk.nameIt("clk")
-
-    isCoercingArgs = true
-    conds.clear()
-    conds.push(Bool(true))
-    keys.clear()
   }
 
   //component stack handling stuff
@@ -269,12 +266,10 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
   val debugs = HashSet[Node]();
 
   val nodes = new ArrayBuffer[Node]
-  val mods  = new ArrayBuffer[Node];
   val omods = new ArrayBuffer[Node];
 
-  val regs  = new ArrayBuffer[Reg];
+  val regs  = new ArrayBuffer[RegDelay];
   val nexts = new ScalaQueue[Node];
-  var nindex = -1;
   var defaultWidth = 32;
   var pathParent: Module = null;
   var verilog_parameters = "";
@@ -347,7 +342,6 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
   }
 
   def io: Data
-  def nextIndex : Int = { nindex = nindex + 1; nindex }
 
   var isWalking = new HashSet[Node];
   var isWalked = new HashSet[Node];
@@ -369,7 +363,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
     from the outputs. */
   def debug(x: Data): Unit = {
     // XXX Because We cannot guarentee x is flatten later on in collectComp.
-    debug(x.node)
+    debug(x.toBits.node)
   }
 
   def debug(node: Node): Unit = {
@@ -379,7 +373,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
   }
 
   def printf(message: String, args: Data*): Unit = {
-    val p = new Printf(conds.top && !this.reset, message, args.map(_.node))
+    val p = new Printf((scope.topCond && !this.reset).node, message, args.map(_.toBits.node))
     printfs += p
     debug(p)
     p.inputs.foreach(debug _)
@@ -449,7 +443,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
     for (c <- Module.components; a <- c.debugs)
       res.enqueue(a)
     for(b <- Module.blackboxes)
-      res.enqueue(b.io.node)
+      res.enqueue(b.io.toBits.node)
     for(c <- Module.components)
       for((n, io) <- c.io.flatten)
         res.enqueue(io.node)
@@ -493,10 +487,9 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
   }
 
   def inferAll(): Int = {
-    val nodesList = ArrayBuffer[Node]()
-    bfs { nodesList += _ }
+    GraphWalker.tarjan(outputs(), {node => node.inferWidth().forward(node)})
 
-    def verify {
+    def verify(nodesList: Seq[Node]) {
       var hasError = false
       for (elm <- nodesList) {
         if( elm.width < 0 ) {
@@ -508,40 +501,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
     }
 
     var count = 0
-    // Infer all node widths by propagating known widths
-    // in a bellman-ford fashion.
-    for(i <- 0 until nodesList.length) {
-      var nbUpdates = 0
-      var done = true;
-      for(elm <- nodesList){
-        val updated = elm.inferWidth().forward(elm)
-        if( updated ) { nbUpdates = nbUpdates + 1  }
-        done = done && !updated
-      }
-
-      count += 1
-
-      if(done){
-        verify
-        return count;
-      }
-    }
-    verify
-    count
-  }
-
-  /** All classes inherited from Data are used to add type information
-   and do not represent logic itself. */
-  def removeTypeNodes(): Int = {
-    var count = 0
-    bfs {x =>
-      scala.Predef.assert(!x.isTypeNode)
-      count += 1
-      for (i <- 0 until x.inputs.length)
-        if (x.inputs(i) != null && x.inputs(i).isTypeNode) {
-          x.inputs(i) = x.inputs(i).getNode
-        }
-    }
+    verify(Nil) // XXX
     count
   }
 
@@ -569,7 +529,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
       {
         if (x.isInstanceOf[Delay]) {
           val clock = if (x.clock == null) x.component.clock else x.clock
-          if (x.isInstanceOf[Reg] && x.asInstanceOf[Reg].isReset ||
+          if (x.isInstanceOf[RegDelay] && x.asInstanceOf[RegDelay].isReset ||
               x.isInstanceOf[Mem[ _ ]] && !Module.isInlineMem) { // assign resets to regs
             val reset = 
               if (x.component.hasExplicitReset)
@@ -607,7 +567,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
       roots ++= c.debugs
     }
     for (b <- Module.blackboxes)
-      roots += b.io.node;
+      roots += b.io.toBits.node;
     for (m <- mods) {
       m match {
         case io: IOBound => {
@@ -621,6 +581,31 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
     }
     roots
   }
+
+  /** Accessible nodes from the IOs */
+  def mods: ArrayBuffer[Node] = {
+    val agg = new Reachable()
+    GraphWalker.depthFirst(outputs(), agg)
+    agg.nodes
+  }
+
+  /** Returns the roots of the component which are connected to IO
+    or debug fields.
+
+    Nodes which are unreachable from those roots will not be returned
+    even though they may be roots (zero output degree) by themselves.
+    */
+  def outputs(): ArrayBuffer[Node] = {
+    var res = ArrayBuffer[Node]()
+    for( a <- this.debugs ) {
+      res += a
+    }
+    for((n, flat) <- this.io.flatten) {
+      res += flat.node
+    }
+    res
+  }
+
 
   def visitNodes(roots: Array[Node]) {
     val stack = new Stack[(Int, Node)]();
@@ -720,7 +705,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
             outputs += m;
           }
  */
-        case r: Reg    => regs += r;
+        case r: RegDelay    => regs += r;
         case other     =>
       }
     }
@@ -790,19 +775,13 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
   }
 
 
-  def genAllMuxes {
-    for (p <- procs) {
-      p.genMuxes()
+  def verifyAllMuxes {
+    for(m <- Module.muxes) {
+      VerifyMuxes(m)
     }
   }
 
-  def verifyAllMuxes {
-    for(m <- Module.muxes) {
-      if(m.inputs(0).width != 1 && m.component != null && (!Module.isEmittingComponents || !m.component.isInstanceOf[BlackBox])) {
-        ChiselError.error({"Mux " + m.name + " has " + m.inputs(0).width + "-bit selector " + m.inputs(0).name}, m.line);
-      }
-    }
-  }
+
   /* XXX Not sure what the two following do.
    They never get overridden yet it is called
    for each component (See Backend implementations). */
@@ -849,42 +828,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
     val stack = new Stack[Node]
     val sccList = new ArrayBuffer[ArrayBuffer[Node]]
 
-    def tarjanSCC(n: Node): Unit = {
-      if(n.isInstanceOf[Delay]) throw new Exception("trying to DFS on a register")
-
-      n.sccIndex = sccIndex
-      n.sccLowlink = sccIndex
-      sccIndex += 1
-      stack.push(n)
-
-      for(i <- n.inputs) {
-        if(!(i == null) && !i.isInstanceOf[Delay] && !i.isReg) {
-          if(i.sccIndex == -1) {
-            tarjanSCC(i)
-            n.sccLowlink = min(n.sccLowlink, i.sccLowlink)
-          } else if(stack.contains(i)) {
-            n.sccLowlink = min(n.sccLowlink, i.sccIndex)
-          }
-        }
-      }
-
-      if(n.sccLowlink == n.sccIndex) {
-        val scc = new ArrayBuffer[Node]
-
-        var top: Node = null
-        do {
-          top = stack.pop()
-          scc += top
-        } while (!(n == top))
-        sccList += scc
-      }
-    }
-
-    bfs { node =>
-      if(node.sccIndex == -1 && !node.isInstanceOf[Delay] && !(node.isReg)) {
-        tarjanSCC(node)
-      }
-    }
+    GraphWalker.tarjan(nodes, {node => node.inferWidth().forward(node)})
 
     // check for combinational loops
     var containsCombPath = false
@@ -893,11 +837,13 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
         containsCombPath = true
         ChiselError.error("FOUND COMBINATIONAL PATH!")
         for((node, ind) <- nodelist zip nodelist.indices) {
-          val ste = node.line
+/* XXX fix later: really needs node.line here.
+          val ste = null
           ChiselError.error("  (" + ind +  ") on line " + ste.getLineNumber +
                                   " in class " + ste.getClassName +
                                   " in file " + ste.getFileName +
                                   ", " + node.name)
+ */
         }
       }
     }
@@ -912,3 +858,15 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
 
 }
 
+
+/** Reachable Nodes in topological order excluding the roots
+  */
+class Reachable extends GraphVisitor {
+
+  val nodes = new ArrayBuffer[Node]
+
+  override def start( node: Node ): Unit = {
+    nodes += node
+  }
+
+}

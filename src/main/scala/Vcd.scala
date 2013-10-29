@@ -29,7 +29,7 @@
 */
 
 package Chisel
-import Node._
+
 import Reg._
 import Literal._
 import ChiselError._

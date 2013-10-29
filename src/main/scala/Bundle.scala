@@ -33,7 +33,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Stack
 import java.lang.reflect.Modifier._
-import Node._;
+
 import ChiselError._
 import sort._
 
@@ -139,7 +139,7 @@ class Bundle extends AggregateData[String] {
     elementsCache
   }
 
-  def fromBits( bits: UInt ): this.type = {
+  override def fromBits( bits: Bits ): this.type = {
     // XXX implement correctly
     this
   }

@@ -29,7 +29,7 @@
 */
 
 package Chisel
-import Node._
+
 import Reg._
 import ChiselError._
 import scala.collection.mutable.HashSet
@@ -38,16 +38,7 @@ class DotBackend extends Backend {
   val keywords = new HashSet[String]();
 
   override def emitRef(node: Node): String = {
-    node match {
-      case r: Reg =>
-        if (r.name == "") {
-          r.name = "R" + r.emitIndex
-        }
-      case _ =>
-        if(node.name == "") {
-          node.name = "T" + node.emitIndex
-        }
-    }
+    super.emitRef(node)
     fullyQualifiedName(node)
   }
 

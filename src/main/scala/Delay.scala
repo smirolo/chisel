@@ -30,26 +30,18 @@
 
 package Chisel
 
-
-object Cat {
-
-  def apply(left: Bits, right: Bits): UInt = {
-    UInt(
-      if( left.isConst && right.isConst ) {
-        Literal(left.node.asInstanceOf[Literal].value << right.node.width
-          | right.node.asInstanceOf[Literal].value,
-          left.node.width + right.node.width)
-      } else {
-        new CatOp(left.node, right.node)
-      })
-  }
-
-  def apply[T <: Data](head: T, tail: T*): UInt =
-    apply(head :: tail.toList)
-
-  def apply[T <: Data](seq: Seq[T]): UInt = {
-    val modsList = seq.filter(_ != null).toList
-    modsList.tail.foldLeft(modsList.head.toBits){ (a, b) => a.toBits ## b.toBits }
-  }
+/** Represents nodes which are holding state (registers and srams) */
+abstract class Delay extends Node {
 }
 
+class RegDelay extends Delay {
+  def next: Node = inputs(0);
+  def init: Node  = inputs(1);
+  def enableSignal: Node = inputs(enableIndex);
+
+  def inferWidth(): Width = new WidthOf(0)
+
+  var enableIndex = 0;
+  var isReset = false
+  var isEnable = false;
+}

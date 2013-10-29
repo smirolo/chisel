@@ -37,7 +37,6 @@ import scala.collection.mutable.BufferProxy
 import scala.collection.mutable.Stack
 import scala.math._
 import Vec._
-import Node._
 
 object VecUIntToOH
 {
@@ -73,8 +72,8 @@ object Vec {
   /** Returns a new *Vec* from a sequence of *Data* nodes.
     */
   def apply[T <: Data](elts: Seq[T]): Vec[T] = {
-    val res = if (elts.forall(_.node.isInstanceOf[Literal]) && elts.head.getWidth > 0) {
-      new ROM(elts.map(_.node.asInstanceOf[Literal]), i => elts.head.clone)
+    val res = if (elts.forall(_.toBits.node.isInstanceOf[Literal]) && elts.head.getWidth > 0) {
+      new ROM(elts.map(_.toBits.node.asInstanceOf[Literal]), i => elts.head.clone)
     } else {
       new Vec[T](i => elts.head.clone)
     }
@@ -126,7 +125,7 @@ object Vec {
 
 }
 
-class VecProc extends CondAssign {
+abstract class VecProc extends Node {
   var addr: UInt = null
   var elms: ArrayBuffer[Bits] = null
 
@@ -150,6 +149,7 @@ class VecProc extends CondAssign {
   }
 }
 
+/* XXX should be a no-argument constructor */
 class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
     with Cloneable with BufferProxy[T] {
   val self = new ArrayBuffer[T]
@@ -233,6 +233,11 @@ class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
     res.toArray
   }
 
+  override def fromBits( bits: Bits ): this.type = {
+    // XXX implement correctly
+    this
+  }
+
   override def <>(src: Data) {
     src match {
       case other: Vec[T] => {
@@ -248,7 +253,6 @@ class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
         for((b, o) <- self zip other.self)
           b ^^ o
     }
-    this
   }
 
   def <>(src: Vec[T]) {

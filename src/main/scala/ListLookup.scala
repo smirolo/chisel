@@ -29,14 +29,14 @@
 */
 
 package Chisel
-import Node._
+
 import scala.collection.mutable.ArrayBuffer
 
 /** XXX Code generation if needed
 object CListLookup {
   def apply[T <: Data](addr: UInt,
     default: List[T], mapping: Array[(UInt, List[T])])
-    (implicit manif: Manifest[T]): List[T] = {
+    (implicit manif: reflect.ClassTag[T]): List[T] = {
 
     val map = mapping.map(m => (addr === m._1, m._2))
     default.zipWithIndex map { case (d, i) =>
@@ -52,15 +52,15 @@ object CListLookup {
 object ListLookup {
 
   def apply[T <: Data](addr: UInt, default: List[T],
-    mapping: Seq[(UInt, List[T])])(implicit m: Manifest[T]): List[T] = {
+    mapping: Seq[(UInt, List[T])])(implicit m: reflect.ClassTag[T]): List[T] = {
 
-    val op = new ListLookup(addr.node, default.map(_.node),
-      mapping.map(x => (x._1.node, x._2.map(_.node))))
+    val op = new ListLookup(addr.node, default.map(_.toBits.node),
+      mapping.map(x => (x._1.node, x._2.map(_.toBits.node))))
 
     var res: List[T] = Nil
     for( i <- 0 to default.length ) {
-      val lookupRef: T = m.erasure.newInstance.asInstanceOf[T]
-      lookupRef.node = new ListLookupRef(op, default.length - i - 1)
+      val lookupRef: T = m.runtimeClass.newInstance.asInstanceOf[T]
+      lookupRef.fromBits(UInt(new ListLookupRef(op, default.length - i - 1)))
       res = res.::(lookupRef) // This will actually prepend ref!
     }
     res

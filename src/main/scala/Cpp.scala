@@ -29,6 +29,7 @@
 */
 
 package Chisel
+
 import scala.collection.mutable.ArrayBuffer
 import scala.math._
 import java.io.InputStream
@@ -36,7 +37,6 @@ import java.io.OutputStream
 import java.io.PrintStream
 import scala.sys.process._
 import sys.process.stringSeqToProcess
-import Node._
 import Reg._
 import ChiselError._
 import Literal._
@@ -248,16 +248,6 @@ class CppBackend extends Backend {
               })))
       }
 
-      case o: DivOp => {
-          val cmd = ("div_n(__d, __x, __y, " + o.width
-            + ", " + o.inputs(0).width + ", " + o.inputs(1).width + ")")
-          (block(makeArray("__d", o)
-            ++ toArray("__x", o.inputs(0))
-            ++ toArray("__y", o.inputs(1))
-            ++ List(cmd)
-            ++ fromArray("__d", o)))
-      }
-
       case o: LeftShiftOp => {
         if (o.width <= bpw) {
           "  " + emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0)) + " << " + emitLoWordRef(o.inputs(1)) + ";\n"
@@ -281,21 +271,6 @@ class CppBackend extends Backend {
       case o: LogicalNegOp =>
         (emitTmpDec(o) + "  " + emitLoWordRef(o) + " = !"
           + emitLoWordRef(o.inputs(0)) + ";\n")
-
-      case o: MulOp =>
-        (if (o.width <= bpw) {
-          ("  " + emitLoWordRef(o) + " = "
-            + emitLoWordRef(o.inputs(0)) + " * "
-            + emitLoWordRef(o.inputs(1)) + ";\n")
-          } else {
-            val cmd = ("mul_n(__d, __x, __y, " + o.width
-              + ", " + o.inputs(0).width + ", " + o.inputs(1).width + ")")
-            (block(makeArray("__d", o)
-              ++ toArray("__x", o.inputs(0))
-              ++ toArray("__y", o.inputs(1))
-              ++ List(cmd)
-              ++ fromArray("__d", o)))
-          })
 
       case o: ReduceAndOp =>
         (emitTmpDec(o) + "  " + emitLoWordRef(o) + " = "
@@ -377,11 +352,6 @@ class CppBackend extends Backend {
         }
       }
 
-      case o: LtnOp => emitOrderOpDef(o)
-      case o: GtrOp => emitOrderOpDef(o)
-      case o: LteOp => emitOrderOpDef(o)
-      case o: GteOp => emitOrderOpDef(o)
-
       case o: EqlOp => {
         val res = new StringBuilder
         val a = o.inputs(0)
@@ -458,6 +428,11 @@ class CppBackend extends Backend {
           + emitWordRef(result, words(result)-1) + " >> " + shamt + ") & 1;\n")
       }
 
+      case o: GteOp => emitOrderOpDef(o)
+      case o: GtrOp => emitOrderOpDef(o)
+      case o: LteOp => emitOrderOpDef(o)
+      case o: LtnOp => emitOrderOpDef(o)
+
       case o: MulSOp => {
         val res = new StringBuilder
         val left = o.inputs(0)
@@ -490,6 +465,21 @@ class CppBackend extends Backend {
         res.toString
       }
 
+      case o: MulOp =>
+        (if (o.width <= bpw) {
+          ("  " + emitLoWordRef(o) + " = "
+            + emitLoWordRef(o.inputs(0)) + " * "
+            + emitLoWordRef(o.inputs(1)) + ";\n")
+          } else {
+            val cmd = ("mul_n(__d, __x, __y, " + o.width
+              + ", " + o.inputs(0).width + ", " + o.inputs(1).width + ")")
+            (block(makeArray("__d", o)
+              ++ toArray("__x", o.inputs(0))
+              ++ toArray("__y", o.inputs(1))
+              ++ List(cmd)
+              ++ fromArray("__d", o)))
+          })
+
       case o: DivSOp => {
         val res = new StringBuilder
         val (signA, absA) = signAbs(o.inputs(0))
@@ -503,6 +493,16 @@ class CppBackend extends Backend {
         val result = new MuxOp(eqlSigns, quo, quoRev)
         res.append(emitDefLo(result))
         res.toString
+      }
+
+      case o: DivOp => {
+          val cmd = ("div_n(__d, __x, __y, " + o.width
+            + ", " + o.inputs(0).width + ", " + o.inputs(1).width + ")")
+          (block(makeArray("__d", o)
+            ++ toArray("__x", o.inputs(0))
+            ++ toArray("__y", o.inputs(1))
+            ++ List(cmd)
+            ++ fromArray("__d", o)))
       }
 
       case o: RemSOp => {
@@ -611,7 +611,7 @@ class CppBackend extends Backend {
           + " = " + emitRef(r.rom) + ".get(" + emitLoWordRef(r.addr) + ", "
           + i + ")"))
 
-      case reg: Reg =>
+      case reg: RegDelay =>
         def updateData(w: Int): String = if (reg.isReset) "TERNARY(" + emitLoWordRef(reg.inputs.last) + ", " + emitWordRef(reg.init, w) + ", " + emitWordRef(reg.next, w) + ")" else emitWordRef(reg.next, w)
 
         def shadow(w: Int): String = emitRef(reg) + "_shadow.values[" + w + "]"
@@ -657,7 +657,7 @@ class CppBackend extends Backend {
           "  " + emitRef(node) + "_cnt = " + emitRef(node) + ";\n"
         } else
           ""
-      case x: Reg =>
+      case x: RegDelay =>
         "  if (rand_init) " + emitRef(node) + ".randomize();\n"
 
       case x: Mem[_] =>
@@ -997,7 +997,7 @@ class CppBackend extends Backend {
       var i = 0;
       for (tok <- toks) {
         if (tok(0) == '%') {
-          val nodes = Module.printArgs(i).maybeFlatten
+          val nodes = Module.printArgs
           for (j <- 0 until nodes.length)
             out_c.write("  fprintf(f, \"" + (if (j > 0) " " else "") +
                         "%s\", TO_CSTR(" + emitRef(nodes(j)) + "));\n");
@@ -1024,7 +1024,7 @@ class CppBackend extends Backend {
       var i = 0;
       for (tok <- toks) {
         if (tok(0) == '%') {
-          val nodes = c.keepInputs(Module.scanArgs(i).maybeFlatten)
+          val nodes = c.keepInputs(Module.scanArgs)
           for (j <- 0 until nodes.length)
             out_c.write("  str_to_dat(read_tok(f), " + emitRef(nodes(j)) + ");\n");
           i += 1;

@@ -30,67 +30,88 @@
 
 package Chisel
 
+class NotImplementedException extends Exception {
+}
 
 /** Base class for width inference algorithms.
   */
 abstract class Width {
 
+  /** Sets the width of a *node* based on its inputs.
+
+   This method is called in forward topological traversal
+   of the graph from inputs to outputs.
+   */
   def forward(node: Node): Boolean
+
+  /** Sets the width of a *node* based on its outputs.
+
+   This method is called in backward topological traversal
+   of the graph from outputs to inputs.
+   */
   def backward(node: Node): Boolean
 
 }
 
-/** Fixed width
+/** Fixed width of *width* bits.
   */
 class FixedWidth(width: Int) extends Width {
 
+  assert(width > 0);
+
   override def forward(node: Node): Boolean = {
-    assert(width > 0);
-    node.width = width
-    false
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 
   override def backward(node: Node): Boolean = {
-    assert(width > 0);
-    node.width = width
-    false
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 }
 
 
-/** Width of an input specified by index
+/** Width of an input labeled *index* + fixed *offset*
   */
 class WidthOf(index: Int, offset: Int = 0) extends Width {
 
   override def forward(node: Node): Boolean = {
-    assert( node.inputs.length > 0 )
-    node.width = node.inputs(index).width - offset
-    false
+    /* IO nodes might or might not be connected. */
+    val width = (if ( node.inputs.length > index )
+      node.inputs(index).width + offset else node.width)
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 
   override def backward(node: Node): Boolean = {
-    // XXX only one output so far.
-    node.inputs(0).width = node.width
-    false
+    throw new NotImplementedException
   }
 }
 
 
-/** Maximum width of all inputs
+/** Maximum width of all inputs + fixed *offset*
   */
-class maxWidth extends Width {
+class maxWidth(offset: Int = 0) extends Width {
 
   override def forward(node: Node): Boolean = {
+/*XXX
     var width = 0
     for (i <- node.inputs)
       if (!(i == null || i == node)) {
         width = width.max(i.width)
       }
-    node.width = width
-    false
+ */
+    val width = node.inputs.map(_.width).max + offset
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 
   override def backward(node: Node): Boolean = {
+    throw new NotImplementedException
     // XXX match widths
     if (node.inputs(0).width != node.width) node.inputs(0).width = node.width
     if (node.inputs(1).width != node.width) node.inputs(1).width = node.width
@@ -98,11 +119,14 @@ class maxWidth extends Width {
   }
 }
 
+/** Maximum width of all inputs saturated to a fixed *width*.
+  */
 class maxToFixedWidth(width: Int) extends Width {
 
   override def forward(node: Node): Boolean = {
-    node.width = width
-    false
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 
   override def backward(node: Node): Boolean = {
@@ -115,101 +139,109 @@ class maxToFixedWidth(width: Int) extends Width {
 }
 
 
-/** Width of an input specified by index
+/** Minimum width of all inputs - fixed *offset*
   */
-
-class minWidth extends Width {
+class minWidth(offset: Int = 0) extends Width {
 
   override def forward(node: Node): Boolean = {
-    node.width = node.inputs.map(_.width).min
-    false
+    val width = node.inputs.map(_.width).min - offset
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 
   override def backward(node: Node): Boolean = {
-    false
+    throw new NotImplementedException
   }
 }
 
 
-class maxWidthPlusOne extends Width {
-
-  override def forward(node: Node): Boolean = {
-    node.width = node.inputs.map(_.width).max + 1
-    false
-  }
-
-  override def backward(node: Node): Boolean = {
-    false
-  }
-}
-
-
+/** Sum of the widths of all inputs + fixed *offset*
+  */
 class SumWidth(offset: Int = 0) extends Width {
 
   override def forward(node: Node): Boolean = {
-    var res = 0;
+    var width = offset;
     for (i <- node.inputs)
-      res = res + i.width;
-    node.width = res + offset
-    false
+      width = width + i.width;
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 
   override def backward(node: Node): Boolean = {
-    false
+    throw new NotImplementedException
   }
 
 }
 
 
-class lshWidthOf(i: Int, n: Node) extends Width {
+/** XXX Left shift width
+  */
+class lshWidthOf(index: Int, n: Node) extends Width {
 
   override def forward(node: Node): Boolean = {
-    node.width = node.inputs(i).width + (1 << n.width)
-    false
+    val width = node.inputs(index).width + (1 << n.width)
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 
   override def backward(node: Node): Boolean = {
-    false
+    throw new NotImplementedException
   }
 }
 
 
-class rshWidthOf(i: Int, n: Node) extends Width {
+/** XXX Right shift width
+  */
+class rshWidthOf(index: Int, n: Node) extends Width {
 
   override def forward(node: Node): Boolean = {
-    node.width = node.inputs(i).width - (1 << n.width)
-    false
+    val width = node.inputs(index).width - (1 << n.width)
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 
   override def backward(node: Node): Boolean = {
-    false
+    throw new NotImplementedException
   }
 }
 
 
+/** XXX Right shift width
+  */
 class RemWidthOf(first: Int, second: Int) extends Width {
 
   override def forward(node: Node): Boolean = {
-    node.width = node.inputs(first).width.min(node.inputs(second).width - 1)
-    false
+    val width = node.inputs(first).width.min(node.inputs(second).width - 1)
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 
   override def backward(node: Node): Boolean = {
-    false
+    throw new NotImplementedException
   }
 }
 
 
+/** XXX Right shift width
+  */
 class PrintfWidth(format: String, formats: String) extends Width {
+
   override def forward(node: Node): Boolean = {
     val argLength = formats.zip(node.inputs).map{
       case (a,b) => node.asInstanceOf[PrintfBase].lengths(a)(b.width)
     }.sum
-    8*(format.length - 2*formats.length + argLength)
-    false
+    val width = 8*(format.length - 2*formats.length + argLength)
+    val update = (node.width != width)
+    if( update ) node.width = width
+    update
   }
 
   override def backward(node: Node): Boolean = {
-    false
+    throw new NotImplementedException
   }
 }

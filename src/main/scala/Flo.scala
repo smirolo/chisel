@@ -36,7 +36,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.io.PrintStream
 import scala.sys.process._
-import Node._
+
 import Reg._
 import ChiselError._
 import Literal._
@@ -72,6 +72,12 @@ class FloBackend extends Backend {
       case x: MuxOp =>
         emitDec(x) + "mux " + emitRef(x.inputs(0)) + " " + emitRef(x.inputs(1)) + " " + emitRef(x.inputs(2)) + "\n"
 
+      case x: ExtractOp =>
+        emitDec(node) + "rsh/" + node.width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1)) + "\n"
+
+      case x: FillOp =>
+        emitDec(x) + "fill/" + node.width + " " + emitRef(node.inputs(0)) + "\n"
+
       case o: Op =>
         emitDec(o) +
         (if (o.inputs.length == 1) {
@@ -103,12 +109,6 @@ class FloBackend extends Backend {
            }
          }) + "\n"
 
-      case x: ExtractOp =>
-        emitDec(node) + "rsh/" + node.width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1)) + "\n"
-
-      case x: FillOp =>
-        emitDec(x) + "fill/" + node.width + " " + emitRef(node.inputs(0)) + "\n"
-
       case x: Bits =>
         if( x.inputs.length == 1 ) {
           emitDec(x) + "mov " + emitRef(x.inputs(0)) + "\n"
@@ -127,7 +127,7 @@ class FloBackend extends Backend {
         }
         emitDec(m) + "st " + emitRef(m.mem) + " " + emitRef(m.addr) + " " + emitRef(m.data) + "\n"
 
-      case x: Reg => // TODO: need resetData treatment
+      case x: RegDelay => // TODO: need resetData treatment
         emitDec(x) + "reg " + emitRef(x.next) + "\n"
 
       case x: Log2Op => // TODO: log2 instruction?

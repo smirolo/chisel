@@ -29,7 +29,7 @@
 */
 
 package Chisel
-import Node._
+
 import Literal._
 import scala.collection.mutable.ArrayBuffer
 
@@ -38,10 +38,10 @@ import scala.collection.mutable.ArrayBuffer
 object Lookup {
 
   def apply[T <: Data](addr: UInt, default: T,
-    mapping: Seq[(UInt, T)])(implicit m: Manifest[T]): T = {
-    val res = m.erasure.newInstance.asInstanceOf[T]
-    res.node = new Lookup(addr.node, default.node,
-      mapping.map(x => (x._1.node, x._2.node)))
+    mapping: Seq[(UInt, T)])(implicit m: reflect.ClassTag[T]): T = {
+    val res = m.runtimeClass.newInstance.asInstanceOf[T]
+    res.fromBits(UInt(new Lookup(addr.node, default.toBits.node,
+      mapping.map(x => (x._1.node, x._2.toBits.node)))))
     res
   }
 }

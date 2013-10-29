@@ -59,4 +59,9 @@ abstract class AggregateData[Key] extends Data {
     this
   }
 
+  def getWidth(): Int = {
+    // XXX implement correctly
+    -1
+  }
+
 }

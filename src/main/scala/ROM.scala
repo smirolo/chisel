@@ -30,7 +30,7 @@
 
 package Chisel
 import ChiselError._
-import Node._
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Stack
 
@@ -42,8 +42,8 @@ class ROM[T <: Data](val lits: Seq[Literal], gen: (Int) => T) extends Vec[T](gen
   def read(addr: UInt): T = {
     val cln = gen(0)
     val data = cln.asOutput
-    var port = new ROMRead(addr.node, this.node)
-    port.width = lits.head.getWidth
+    var port = new ROMRead(addr.node, this.toBits.node)
+    port.width = lits.head.width
 // XXX temporarily removed:    data assign port
     data
   }

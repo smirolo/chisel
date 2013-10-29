@@ -51,18 +51,18 @@ class when (prevCond: Bool) {
     new when(prevCond || cond);
   }
   def otherwise (block: => Unit) {
-    val cond = !prevCond
-    if (Node.conds.length == 1) cond.node.canBeUsedAsDefault = true
-    when.execWhen(cond){ block }
+    Module.scope.conds.push((Module.scope.topCond && !prevCond, true));
+    block;
+    Module.scope.conds.pop();
   }
 }
 
 /** uses conds from the scope */
 object when {
   def execWhen(cond: Bool)(block: => Unit) {
-    Node.conds.push(Node.conds.top && cond);
+    Module.scope.conds.push((Module.scope.topCond && cond, false));
     block;
-    Node.conds.pop();
+    Module.scope.conds.pop();
   }
 
   /** Perform the statements in *block* on a positive clock edge
@@ -102,18 +102,18 @@ object unless {
 */
 object switch {
   def apply(c: Bits)(block: => Unit) {
-    Node.keys.push(c);
+    Module.scope.keys.push(c);
     block;
-    Node.keys.pop();
+    Module.scope.keys.pop();
   }
 }
 
 object is {
   def apply(v: Bits)(block: => Unit) {
-    if (Node.keys.length == 0) {
+    if (Module.scope.keys.length == 0) {
       ChiselError.error("using 'is(bits)' outside a 'switch(bits)' statement");
     } else {
-      val c = Node.keys(0) === v;
+      val c = Module.scope.keys(0) === v;
       when (c) { block }
     }
   }

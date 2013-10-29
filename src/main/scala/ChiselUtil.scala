@@ -29,7 +29,7 @@
 */
 
 package Chisel
-import Node._
+
 import scala.math._
 import Literal._
 
@@ -369,7 +369,7 @@ class QueueIO[T <: Data](gen: T, entries: Int) extends Bundle
   val count = UInt(OUTPUT, log2Up(entries + 1))
 }
 
-class Queue[T <: Data](gen: T, val entries: Int, pipe: Boolean = false, flow: Boolean = false, _reset: Bool = null)(implicit m: Manifest[T]) extends Module(_reset=_reset)
+class Queue[T <: Data](gen: T, val entries: Int, pipe: Boolean = false, flow: Boolean = false, _reset: Bool = null)(implicit m: reflect.ClassTag[T]) extends Module(_reset=_reset)
 {
   val io = new QueueIO(gen, entries)
 
@@ -421,7 +421,7 @@ class Queue[T <: Data](gen: T, val entries: Int, pipe: Boolean = false, flow: Bo
   */
 object Queue
 {
-  def apply[T <: Data](enq: DecoupledIO[T], entries: Int = 2, pipe: Boolean = false)(implicit m: Manifest[T]): DecoupledIO[T]  = {
+  def apply[T <: Data](enq: DecoupledIO[T], entries: Int = 2, pipe: Boolean = false)(implicit m: reflect.ClassTag[T]): DecoupledIO[T]  = {
     val q = Module(new Queue(enq.bits.clone, entries, pipe))
     q.io.view(q.io.elements.filter(j => j._1 != "count")) // count io is not being used if called functionally
     q.io.enq.valid := enq.valid // not using <> so that override is allowed
@@ -529,15 +529,15 @@ object Pipe
   */
 object PriorityMux
 {
-  def apply[T <: Bits](in: Seq[(Bool, T)])(implicit m: Manifest[T]): T = {
+  def apply[T <: Bits](in: Seq[(Bool, T)])(implicit m: reflect.ClassTag[T]): T = {
     if (in.size == 1) {
       in.head._2
     } else {
       Mux(in.head._1, in.head._2, apply(in.tail))
     }
   }
-  def apply[T <: Bits](sel: Seq[Bool], in: Seq[T])(implicit m: Manifest[T]): T = apply(sel zip in)
-  def apply[T <: Bits](sel: Bits, in: Seq[T])(implicit m: Manifest[T]): T = apply((0 until in.size).map(sel(_)), in)
+  def apply[T <: Bits](sel: Seq[Bool], in: Seq[T])(implicit m: reflect.ClassTag[T]): T = apply(sel zip in)
+  def apply[T <: Bits](sel: Bits, in: Seq[T])(implicit m: reflect.ClassTag[T]): T = apply((0 until in.size).map(sel(_)), in)
 }
 
 /** Returns the bit position of the trailing 1 in the input vector

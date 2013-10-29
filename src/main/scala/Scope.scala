@@ -30,26 +30,45 @@
 
 package Chisel
 
+import scala.collection.mutable.Stack
 
-object Cat {
 
-  def apply(left: Bits, right: Bits): UInt = {
-    UInt(
-      if( left.isConst && right.isConst ) {
-        Literal(left.node.asInstanceOf[Literal].value << right.node.width
-          | right.node.asInstanceOf[Literal].value,
-          left.node.width + right.node.width)
-      } else {
-        new CatOp(left.node, right.node)
-      })
+/** The programming model to construct a circuit is equivalent
+  to a recursive descent parser from a top ``Module``.
+
+  As such, scopes are pushed and popped along the way.
+  */
+class Scope {
+
+  /** defines the Scope of conditions set through *when* calls.
+    Each tuple contains the condition typed condition node and
+    a boolean that indicates if the condition is part of
+    an otherwise clause. */
+  val conds = new Stack[(Bool, Boolean)]();
+
+  def genCond(): Node = conds.top._1.node;
+
+  def topCond: Bool = conds.top._1
+
+  /** Returns true if the condition can be used as a default value. */
+  def isDefaultCond(): Boolean = {
+    /* true is the conditional at the top of the stack is bound
+     to an 'always true' variable and false otherwise. */
+    genCond() match {
+      case lit: Literal => lit.value == 1
+      case _ =>
+        /* We only have Bool(true) and an otherwise condition on the stack. */
+        conds.length == 2 && conds.top._2
+    }
   }
 
-  def apply[T <: Data](head: T, tail: T*): UInt =
-    apply(head :: tail.toList)
+  /** defines the Scope of Bits set by *switch* call and used for *is* */
+  val keys = new Stack[Bits]();
 
-  def apply[T <: Data](seq: Seq[T]): UInt = {
-    val modsList = seq.filter(_ != null).toList
-    modsList.tail.foldLeft(modsList.head.toBits){ (a, b) => a.toBits ## b.toBits }
-  }
+  val clocks = new Stack[Clock]();
+
+  def clk: Clock = clocks.top
+
+  conds.push((Bool(true), true));
+  clocks.push((new Clock).nameIt("clk"))
 }
-

@@ -50,7 +50,7 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
     if (args.length == 0) {
       (Array[Node](), Array[Node]())
     } else {
-      val testNodes = args.map(i => i.maybeFlatten).reduceLeft(_ ++ _).map(x => x.getNode);
+      val testNodes = args
       (c.keepInputs(testNodes), c.removeInputs(testNodes))
     }
   }

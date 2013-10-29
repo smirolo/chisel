@@ -29,8 +29,8 @@
 */
 
 package Chisel
+
 import ChiselError._
-import Node._
 import scala.reflect._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
@@ -61,7 +61,7 @@ object Mem {
   }
 }
 
-abstract class AccessTracker extends Node with Delay {
+abstract class AccessTracker extends Delay {
   def writeAccesses: ArrayBuffer[_ <: MemAccess]
   def readAccesses: ArrayBuffer[_ <: MemAccess]
 }
@@ -74,9 +74,9 @@ class Mem[T <: Data](gen: () => T, val n: Int, val seqRead: Boolean) extends Acc
   val seqreads = ArrayBuffer[MemSeqRead]()
   val reads = ArrayBuffer[MemRead]()
   val readwrites = ArrayBuffer[MemReadWrite]()
-  val data = gen().node
+  val data = gen().toBits.node
 
-  def inferWidth(): Width = new FixedWidth(data.getWidth)
+  def inferWidth(): Width = new FixedWidth(gen().toBits.getWidth)
 
   private val readPortCache = HashMap[UInt, T]()
   def doRead(addr: UInt): T = {
@@ -84,21 +84,21 @@ class Mem[T <: Data](gen: () => T, val n: Int, val seqRead: Boolean) extends Acc
       return readPortCache(addr)
     }
 
-    val addrIsReg = addr.isInstanceOf[UInt] && addr.node.inputs.length == 1 && addr.node.inputs(0).isInstanceOf[Reg]
+    val addrIsReg = addr.isInstanceOf[UInt] && addr.node.inputs.length == 1 && addr.node.inputs(0).isInstanceOf[RegDelay]
     val rd = if (seqRead && !Module.isInlineMem && addrIsReg) {
       (seqreads += new MemSeqRead(this, addr.node.inputs(0))).last
     } else {
       (reads += new MemRead(this, addr.node)).last
     }
     val data = gen()
-    data.node = rd
+    data.fromBits(UInt(rd))
     readPortCache += (addr -> data)
     data
   }
 
 
   private def doit(addr: UInt, cond: Bool, data: T, wmask: UInt) = {
-    val wr = new MemWrite(this, cond.node, addr.node, data.node, wmask.node)
+    val wr = new MemWrite(this, cond.node, addr.node, data.toBits.node, wmask.node)
     this.writes += wr
     this.inputs += wr
     wr
@@ -142,9 +142,9 @@ class Mem[T <: Data](gen: () => T, val n: Int, val seqRead: Boolean) extends Acc
 
   def read(addr: UInt): T = doRead(addr)
 
-  def write(addr: UInt, data: T) = doWrite(addr, conds.top, data, null.asInstanceOf[UInt])
+  def write(addr: UInt, data: T) = doWrite(addr, Module.scope.topCond, data, null.asInstanceOf[UInt])
 
-  def write(addr: UInt, data: T, wmask: UInt) = doWrite(addr, conds.top, data, wmask)
+  def write(addr: UInt, data: T, wmask: UInt) = doWrite(addr, Module.scope.topCond, data, wmask)
 
   def apply(addr: UInt) = {
     val rdata = doRead(addr)
@@ -203,7 +203,7 @@ class MemRead(mem: Mem[_], addri: Node) extends MemAccess(mem, addri) {
 }
 
 class MemSeqRead(mem: Mem[_], addri: Node) extends MemAccess(mem, addri) {
-  val addrReg = addri.asInstanceOf[Reg]
+  val addrReg = addri.asInstanceOf[RegDelay]
   override def cond = if (addrReg.isEnable) addrReg.enableSignal else Bool(true).node
   override def isReg = true
   override def addr = if(inputs.length > 2) inputs(2) else null
@@ -224,10 +224,10 @@ class MemSeqRead(mem: Mem[_], addri: Node) extends MemAccess(mem, addri) {
   override def isRamWriteInput(n: Node) = addrReg.isEnable && addrReg.enableSignal == n || addr == n
 }
 
-class PutativeMemWrite(mem: Mem[_], addr: Node) extends CondAssign {
+abstract class PutativeMemWrite(mem: Mem[_], addr: Node) extends Node {
 /* XXX deprecated.
   override def procAssign(src: T) =
-    mem.doWrite(addri, conds.top, src, null.asInstanceOf[UInt])
+    mem.doWrite(addri, Module.scope.conds.top, src, null.asInstanceOf[UInt])
  */
 }
 

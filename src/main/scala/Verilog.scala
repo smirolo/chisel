@@ -29,7 +29,7 @@
 */
 
 package Chisel
-import Node._
+
 import java.io.File;
 import java.io.InputStream
 import java.io.OutputStream
@@ -66,7 +66,6 @@ object VerilogBackend {
 
 class VerilogBackend extends Backend {
   Module.isEmittingComponents = true
-  isCoercingArgs = false
   val keywords = VerilogBackend.keywords
 
   val flushedTexts = HashSet[String]()
@@ -276,12 +275,6 @@ class VerilogBackend extends Backend {
       case x: MuxOp =>
         ("  assign " + emitTmp(x) + " = " + emitRef(x.inputs(0)) + " ? " + emitRef(x.inputs(1)) + " : " + emitRef(x.inputs(2)) + ";\n")
 
-      case x: UnaryOp =>
-        ("  assign " + emitTmp(x) + " = " + x.opSlug + " " + emitRef(x.inputs(0)) + ";\n")
-
-      case x:BinaryOp =>
-       ("  assign " + emitTmp(x) + " = " + emitRef(x.inputs(0)) + " " + x.opSlug + " " + emitRef(x.inputs(1)) + ";\n")
-
       case x: RightShiftSOp =>
         ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.inputs(0)) + ") " + ">>>" + " " + emitRef(x.inputs(1)) + ";\n")
 
@@ -404,6 +397,12 @@ class VerilogBackend extends Backend {
       case s: Sprintf =>
         "  always @(*) $sformat(" + emitTmp(s) + ", " + s.args.map(emitRef _).foldLeft(CString(s.format))(_ + ", " + _) + ");\n"
 
+      case x:BinaryOp =>
+       ("  assign " + emitTmp(x) + " = " + emitRef(x.inputs(0)) + " " + x.opSlug + " " + emitRef(x.inputs(1)) + ";\n")
+
+      case x: UnaryOp =>
+        ("  assign " + emitTmp(x) + " = " + x.opSlug + " " + emitRef(x.inputs(0)) + ";\n")
+
       case _ =>
         ""
     }
@@ -416,14 +415,8 @@ class VerilogBackend extends Backend {
     "  wire" + emitSigned(node) + emitWidth(node) + " " + emitRef(node) + ";\n"
 
   override def emitDec(node: Node): String = {
-    val res = 
+    val res =
     node match {
-      case x: Bits =>
-        if(!x.isIo) {
-          emitDecBase(node)
-        } else {
-          ""
-        }
       case x: ListLookupRef =>
         "  reg" + emitSigned(node) + "[" + (node.width-1) + ":0] " + emitRef(node) + ";\n";
 
@@ -436,7 +429,7 @@ class VerilogBackend extends Backend {
       case x: Literal =>
         ""
 
-      case x: Reg =>
+      case x: RegDelay =>
         if (node.isMemOutput) {
           ""
         } else {
@@ -456,6 +449,9 @@ class VerilogBackend extends Backend {
         x.referenced = true
         emitDecBase(node)
 
+      case x: IOBound =>
+          ""
+
       case _ =>
         emitDecBase(node)
     }
@@ -466,8 +462,8 @@ class VerilogBackend extends Backend {
     val harness  = createOutputFile(name + "-harness.v");
     val printFormat = Module.printArgs.map(a => "0x%x").fold("")((y,z) => z + " " + y)
     val scanFormat = Module.scanArgs.map(a => "%x").fold("")((y,z) => z + " " + y)
-    val printNodes = for (arg <- Module.printArgs; node <- arg.maybeFlatten) yield arg
-    val scanNodes = for (arg <- Module.scanArgs; node <- c.keepInputs(arg.maybeFlatten)) yield arg
+    val printNodes = for (arg <- Module.printArgs) yield arg
+    val scanNodes = for (arg <- c.keepInputs(Module.scanArgs)) yield arg
     harness.write("module test;\n")
     for (node <- scanNodes)
       harness.write("    reg [" + (node.width-1) + ":0] " + emitRef(node) + ";\n")
@@ -573,7 +569,7 @@ class VerilogBackend extends Backend {
 
   def emitReg(node: Node): String = {
     node match {
-      case reg: Reg =>
+      case reg: RegDelay =>
         if(reg.isMemOutput) {
             ""
         } else if(reg.isEnable && (reg.enableSignal.isInstanceOf[Literal] || reg.enableSignal.asInstanceOf[Literal].value != 1)){
