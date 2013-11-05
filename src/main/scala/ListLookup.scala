@@ -54,8 +54,9 @@ object ListLookup {
   def apply[T <: Data](addr: UInt, default: List[T],
     mapping: Seq[(UInt, List[T])])(implicit m: reflect.ClassTag[T]): List[T] = {
 
-    val op = new ListLookup(addr.node, default.map(_.toBits.node),
-      mapping.map(x => (x._1.node, x._2.map(_.toBits.node))))
+    val op = new ListLookup(addr.node.lvalue(),
+      default.map(_.toBits.node.lvalue()),
+      mapping.map(x => (x._1.node.lvalue(), x._2.map(_.toBits.node.lvalue()))))
 
     var res: List[T] = Nil
     for( i <- 0 to default.length ) {

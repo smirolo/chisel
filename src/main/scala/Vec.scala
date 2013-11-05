@@ -72,11 +72,7 @@ object Vec {
   /** Returns a new *Vec* from a sequence of *Data* nodes.
     */
   def apply[T <: Data](elts: Seq[T]): Vec[T] = {
-    val res = if (elts.forall(_.toBits.node.isInstanceOf[Literal]) && elts.head.getWidth > 0) {
-      new ROM(elts.map(_.toBits.node.asInstanceOf[Literal]), i => elts.head.clone)
-    } else {
-      new Vec[T](i => elts.head.clone)
-    }
+    val res = new Vec[T](i => elts.head.clone)
     elts.zipWithIndex.foreach{ case (e,i) => res += e }
     res
   }

@@ -61,7 +61,7 @@ object Mux {
   def apply[T <: Data](t: Bool, c: T, a: T)(implicit m: reflect.ClassTag[T]): T = {
     val op =
       if( t.node.isInstanceOf[Literal] ) {
-        if( t.node.asInstanceOf[Literal].value == 0 ) a.toBits.node else c.toBits.node
+        if( t.node.asInstanceOf[Literal].value == 0 ) a.toBits.node.lvalue() else c.toBits.node.lvalue()
       } else if( c.toBits.node.isInstanceOf[Literal] && a.toBits.node.isInstanceOf[Literal]) {
         if (c.toBits.node.asInstanceOf[Literal].value
           == a.toBits.node.asInstanceOf[Literal].value) {
@@ -79,21 +79,21 @@ object Mux {
           && a.toBits.node.asInstanceOf[Literal].value == 1) {
           /* special case where we can use the cond itself. */
           if(c.toBits.node.width == 1 && a.toBits.node.width == 1) {
-            new BitwiseRevOp(t.node)
+            new BitwiseRevOp(t.node.lvalue())
           } else {
             new CatOp(new FillOp(Literal(0,1),
               max(c.toBits.node.width-1, a.toBits.node.width-1)),
-              new BitwiseRevOp(t.node))
+              new BitwiseRevOp(t.node.lvalue()))
           }
         } else {
-          new MuxOp(t.node, c.toBits.node, a.toBits.node)
+          new MuxOp(t.node.lvalue(), c.toBits.node.lvalue(), a.toBits.node.lvalue())
         }
       } else if (a.toBits.node.isInstanceOf[MuxOp]
         && c.toBits.node.clearlyEquals(a.toBits.node.inputs(1))) {
         new MuxOp(new LogicalOrOp(
-          t.node, a.toBits.node.inputs(0)), c.toBits.node, a.toBits.node.inputs(2))
+          t.node.lvalue(), a.toBits.node.inputs(0)), c.toBits.node, a.toBits.node.inputs(2))
       } else {
-        new MuxOp(t.node, c.toBits.node, a.toBits.node)
+        new MuxOp(t.node.lvalue(), c.toBits.node.lvalue(), a.toBits.node.lvalue())
       }
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.fromBits(UInt(op))

@@ -112,44 +112,35 @@ abstract class Bits extends Data {
 
   /* Assignment to this */
   override def procAssign(src: Node) {
-    var result = (if( node != null && node.isInstanceOf[IOBound] )
-      (if( node.inputs.length > 0 ) node.inputs(0) else null) else node)
+    var result: Node = null
     if( Module.scope.isDefaultCond() ) {
-      println("XXX [procAssign] isDefaultCond")
       if( default != null ) {
         if( default.inputs(2) != null ) {
           /* We are dealing with a default assignement but the default
            position is already occupied. */
-          ChiselError.error("Re-assignment to node.")
+          ChiselError.warning("re-assignment to node under default condition.")
         } else {
-          println("XXX [procAssign] Assign " + src + " to default input of " + default)
-          default.inputs(2) = src
+          default.inputs(2) = src.lvalue()
         }
       } else {
-        if( result != null ) {
+        result = src.lvalue()
+        if( node != null && node.assigned ) {
           /* We are dealing with a default assignement, there are no
            mux tree but the default position is already occupied. */
-          ChiselError.error("Re-assignment to node.")
-        } else {
-          result = src
+          ChiselError.warning("re-assignment to node under default condition.")
         }
       }
     } else {
-      val assign = new MuxOp(Module.scope.genCond(), src, result)
-      if( result == null ) {
-        println("XXX [procAssign] first assignment to default")
+      val result = new MuxOp(Module.scope.genCond(), src.lvalue(),
+        if( node != null ) node.lvalue() else null)
+      if( node == null ) {
         /* First assignment we construct a mux tree with a dangling
          default position. */
-        default = assign
+        default = result
       }
-      result = assign
     }
-    if( node != null && node.isInstanceOf[IOBound] ) {
-      if( node.inputs.length > 0 ) {
-        node.inputs(0) = result
-      } else {
-        node.inputs.append(result)
-      }
+    if( node != null ) {
+      node.rvalue(result)
     } else {
       node = result
     }
@@ -166,7 +157,8 @@ abstract class Bits extends Data {
       "/*" + (if (name != null && !name.isEmpty) name else "?")
         + (if (component != null) (" in " + component) else "") + "*/ "
         + getClass.getName + "("
-        + "width=" + node.width)
+        + "node=" + node
+        + ", width=" + node.width)
     str = str + "))"
     str
   }
@@ -283,7 +275,7 @@ object BitwiseRev {
           & ((BigInt(1) << opand.node.width) - 1),
           opand.node.width)
       } else {
-        new BitwiseRevOp(opand.node)
+        new BitwiseRevOp(opand.node.lvalue())
       })
   }
 }
@@ -296,7 +288,7 @@ object And {
         & right.node.asInstanceOf[Literal].value,
         max(left.node.width, right.node.width))
     } else {
-      new AndOp(left.node, right.node)
+      new AndOp(left.node.lvalue(), right.node.lvalue())
     }
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
@@ -312,7 +304,7 @@ object Eql {
         Literal(if (left.node.asInstanceOf[Literal].value
           == right.node.asInstanceOf[Literal].value) 1 else 0)
       } else {
-        new EqlOp(left.node, right.node)
+        new EqlOp(left.node.lvalue(), right.node.lvalue())
       })
   }
 }
@@ -340,14 +332,14 @@ object Extract {
           & ((BigInt(1) << w) - BigInt(1)), w)
       } else if( opand.isConst ) {
         /* XXX Why would this be better than an ExtractOp? */
-        val rsh = new RightShiftOp(opand.node, lo.node)
+        val rsh = new RightShiftOp(opand.node.lvalue(), lo.node.lvalue())
         val hiMinusLoPlus1 = new AddOp(
-          new SubOp(hi.node, lo.node), Literal(1))
+          new SubOp(hi.node.lvalue(), lo.node.lvalue()), Literal(1))
         val mask = new SubOp(
           new LeftShiftOp(Literal(1), hiMinusLoPlus1), Literal(1))
         new AndOp(rsh, mask)
       } else {
-        new ExtractOp(opand.node, hi.node, lo.node)
+        new ExtractOp(opand.node.lvalue(), hi.node.lvalue(), lo.node.lvalue())
       })
   }
 }
@@ -360,7 +352,7 @@ object Add {
           + right.node.asInstanceOf[Literal].value,
           max(left.node.width, right.node.width) + 1) // XXX does not always need carry.
       } else {
-        new AddOp(left.node, right.node)
+        new AddOp(left.node.lvalue(), right.node.lvalue())
       }
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
@@ -382,9 +374,9 @@ object Fill {
           c = (c << w) | a
         Literal(c, n * w)
       } else if( n == 1 ) {
-        opand.node
+        opand.node.lvalue()
       } else {
-        new FillOp(opand.node, n)
+        new FillOp(opand.node.lvalue(), n)
       })
   }
 }
@@ -398,7 +390,7 @@ object LeftShift {
           << right.node.asInstanceOf[Literal].value.toInt,
           left.node.width + right.node.width)
       } else {
-        new LeftShiftOp(left.node, right.node)
+        new LeftShiftOp(left.node.lvalue(), right.node.lvalue())
       }
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
@@ -414,7 +406,7 @@ object LogicalNeg {
         if( opand.node.asInstanceOf[Literal].value == 0) Literal(1)
         else Literal(0)
       } else {
-        new LogicalNegOp(opand.node)
+        new LogicalNegOp(opand.node.lvalue())
       })
   }
 }
@@ -436,9 +428,9 @@ object RightShift {
         }
       } else {
         if( left.isInstanceOf[UInt] ) {
-          new RightShiftOp(left.node, right.node)
+          new RightShiftOp(left.node.lvalue(), right.node.lvalue())
         } else {
-          new RightShiftSOp(left.node, right.node)
+          new RightShiftSOp(left.node.lvalue(), right.node.lvalue())
         }
       }
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
@@ -455,7 +447,7 @@ object Neq {
         Literal(if (left.node.asInstanceOf[Literal].value
           != right.node.asInstanceOf[Literal].value) 1 else 0)
       } else {
-        new NeqOp(left.node, right.node)
+        new NeqOp(left.node.lvalue(), right.node.lvalue())
       })
   }
 }
@@ -469,7 +461,7 @@ object Or {
           | right.node.asInstanceOf[Literal].value,
           max(left.node.width, right.node.width))
       } else {
-        new OrOp(left.node, right.node)
+        new OrOp(left.node.lvalue(), right.node.lvalue())
       }
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
@@ -486,7 +478,7 @@ object Xor {
           ^ right.node.asInstanceOf[Literal].value,
           max(left.node.width, right.node.width))
       } else {
-        new XorOp(left.node, right.node)
+        new XorOp(left.node.lvalue(), right.node.lvalue())
       }
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
@@ -497,7 +489,7 @@ object Xor {
 
 object ReduceAnd {
   def apply[T <: Bits](opand: T): Bool = {
-    val op = new ReduceAndOp(opand.node)
+    val op = new ReduceAndOp(opand.node.lvalue())
     Bool(op)
   }
 }
@@ -509,7 +501,7 @@ object andR {
 
 object ReduceOr {
   def apply[T <: Bits](opand: T): Bool = {
-    val op = new ReduceOrOp(opand.node)
+    val op = new ReduceOrOp(opand.node.lvalue())
     Bool(op)
   }
 }
@@ -521,7 +513,7 @@ object orR {
 
 object ReduceXor {
   def apply[T <: Bits](opand: T): Bool = {
-    val op = new ReduceXorOp(opand.node)
+    val op = new ReduceXorOp(opand.node.lvalue())
     Bool(op)
   }
 }
@@ -538,7 +530,7 @@ object Sub {
           - right.node.asInstanceOf[Literal].value,
           max(left.node.width, right.node.width) + 1) // XXX unnecessary carry.
       } else {
-        new SubOp(left.node, right.node)
+        new SubOp(left.node.lvalue(), right.node.lvalue())
       }
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op

@@ -78,6 +78,7 @@ class FixedWidth(width: Int) extends Width {
 class WidthOf(index: Int, offset: Int = 0) extends Width {
 
   override def forward(node: Node): Boolean = {
+//    println("XXX [WidthOf("+index+")] node: " + node)
     /* IO nodes might or might not be connected. */
     val width = (if ( node.inputs.length > index )
       node.inputs(index).width + offset else node.width)

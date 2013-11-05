@@ -32,9 +32,9 @@ package Chisel
 
 class FPGABackend extends VerilogBackend
 {
-  def isMultiWrite(m: Mem[_]) = m.writes.size > 1
+  def isMultiWrite(m: MemDelay) = m.writes.size > 1
   def writen(m: MemWrite) = if (isMultiWrite(m.mem)) m.mem.writes.indexOf(m) else 0
-  def writeMap(m: Mem[_], exclude: Int = -1) = {
+  def writeMap(m: MemDelay, exclude: Int = -1) = {
     if (isMultiWrite(m)) {
       (0 until m.writes.size).filterNot(_ == exclude).map(emitRef(m) + "_" + _)
     } else {
@@ -44,9 +44,9 @@ class FPGABackend extends VerilogBackend
 
   override def emitDec(node: Node): String = {
     node match {
-      case m: Mem[_] =>
+      case m: MemDelay =>
         assert(m.isInline)
-        "  reg [" + (m.width-1) + ":0] " + writeMap(m).map(_ + " [" + (m.n-1) + ":0]").reduceLeft(_ + ", " + _) + ";\n"
+        "  reg [" + (m.width-1) + ":0] " + writeMap(m).map(_ + " [" + (m.depth-1) + ":0]").reduceLeft(_ + ", " + _) + ";\n"
 
       case _ =>
         super.emitDec(node)

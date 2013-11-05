@@ -34,6 +34,7 @@ package Chisel
   */
 abstract class Op extends Node {
   val opSlug = "und"
+  val opInfix = "und"
 
   override def toString: String = {
     val res = new StringBuilder
@@ -56,6 +57,8 @@ abstract class Op extends Node {
 /** Base class for nodes that appear as unary operators in the generated graph.
   */
 abstract class UnaryOp(opandNode: Node) extends Op {
+  val opPrefix = "und"
+
   this.inputs.append(opandNode)
 
   def opand: Node = this.inputs(0)
@@ -64,7 +67,8 @@ abstract class UnaryOp(opandNode: Node) extends Op {
 /** Bitwise reverse
 */
 class BitwiseRevOp(opand: Node) extends UnaryOp(opand) {
-  override val opSlug = "~"
+  override val opSlug = "not"
+  override val opPrefix = "~"
 
   def inferWidth(): Width = new WidthOf(0)
 }
@@ -73,7 +77,8 @@ class BitwiseRevOp(opand: Node) extends UnaryOp(opand) {
 /** Logical Negation
 */
 class LogicalNegOp(opand: Node) extends UnaryOp(opand) {
-  override val opSlug = "!"
+  override val opSlug = "not"
+  override val opPrefix = "!"
 
   override def inferWidth(): Width = new FixedWidth(1)
 }
@@ -82,7 +87,8 @@ class LogicalNegOp(opand: Node) extends UnaryOp(opand) {
 /** Sign reversal for integers
 */
 class SignRevOp(opand: Node) extends UnaryOp(opand) {
-  override val opSlug = "-"
+  override val opSlug = "neg"
+  override val opPrefix = "-"
 
   override def inferWidth(): Width = new WidthOf(0)
 }
@@ -90,9 +96,12 @@ class SignRevOp(opand: Node) extends UnaryOp(opand) {
 
 /** Base class for binary operators
   */
-abstract class BinaryOp(left: Node, right: Node) extends Op {
-  this.inputs.append(left)
-  this.inputs.append(right)
+abstract class BinaryOp(leftNode: Node, rightNode: Node) extends Op {
+  this.inputs.append(leftNode)
+  this.inputs.append(rightNode)
+
+  def left: Node = inputs(0)
+  def right: Node = inputs(1)
 }
 
 class LeftShiftOp(left: Node, right: Node) extends BinaryOp(left, right) {
@@ -114,14 +123,16 @@ class RightShiftSOp(left: Node, right: Node) extends RightShiftOp(left, right) {
 
 
 class AddOp(left: Node, right: Node) extends BinaryOp(left, right) {
-  override val opSlug = "+"
+  override val opSlug = "add"
+  override val opInfix = "+"
 
   def inferWidth(): Width = new maxWidth()
 }
 
 
 class AndOp(left: Node, right: Node) extends BinaryOp(left, right) {
-  override val opSlug = "&"
+  override val opSlug = "and"
+  override val opInfix = "&"
 
   def inferWidth(): Width = new maxWidth()
 }
@@ -154,24 +165,25 @@ class FillOp(opand: Node, val n: Int) extends UnaryOp(opand) {
 
 
 class DivOp(left: Node, right: Node) extends BinaryOp(left, right) {
-  override val opSlug = "/"
+  override val opSlug = "div"
+  override val opInfix = "/"
 
   def inferWidth(): Width = new WidthOf(0)
 }
 
 
 class DivSOp(left: Node, right: Node) extends DivOp(left, right) {
-  override val opSlug = "s/s"
+  override val opSlug = "divs"
 }
 
 
 class DivSUOp(left: Node, right: Node) extends DivOp(left, right) {
-  override val opSlug = "s/u"
+  override val opSlug = "divsu"
 }
 
 
 class DivUSOp(left: Node, right: Node) extends DivOp(left, right) {
-  override val opSlug = "s/s"
+  override val opSlug = "divus"
 
   override def inferWidth(): Width = new WidthOf(0, -1)
 }
@@ -185,30 +197,35 @@ class Log2Op(opand: Node, val nbits: Int) extends UnaryOp(opand) {
 
 
 class MulOp(left: Node, right: Node) extends BinaryOp(left, right) {
-  override val opSlug = "*"
+  override val opSlug = "mul"
+  override val opInfix = "*"
 
   def inferWidth(): Width = new SumWidth()
 }
 
 
 class MulSOp(left: Node, right: Node) extends MulOp(left, right) {
-  override val opSlug = "s*s"
+  override val opSlug = "muls"
 }
 
 
 class MulSUOp(left: Node, right: Node) extends MulOp(left, right) {
-  override val opSlug = "s*s"
+  override val opSlug = "mulsu"
 
   override def inferWidth(): Width = new SumWidth(-1)
 }
 
 
-class MuxOp(cond: Node, thenNode: Node, elseNode: Node ) extends Op {
-  override val opSlug = "Mux";
+class MuxOp(condNode: Node, thenNodeP: Node, elseNode: Node ) extends Op {
+  override val opSlug = "mux";
 
-  inputs.append(cond)
-  inputs.append(thenNode)
+  inputs.append(condNode)
+  inputs.append(thenNodeP)
   inputs.append(elseNode)
+
+  def cond: Node = inputs(0)
+  def thenNode: Node = inputs(1)
+  def otherwise: Node = inputs(2)
 
   override def inferWidth(): Width = new WidthOf(0)
 
@@ -220,33 +237,35 @@ class MuxOp(cond: Node, thenNode: Node, elseNode: Node ) extends Op {
 
 
 class RemOp(left: Node, right: Node) extends BinaryOp(left, right) {
-  override val opSlug = "%"
+  override val opSlug = "rem"
+  override val opInfix = "%"
 
   override def inferWidth(): Width = new minWidth()
 }
 
 
 class RemSOp(left: Node, right: Node) extends RemOp(left, right) {
-  override val opSlug = "s%s"
+  override val opSlug = "rems"
 }
 
 
 class RemSUOp(left: Node, right: Node) extends RemOp(left, right) {
-  override val opSlug = "s%u"
+  override val opSlug = "remsu"
 
   override def inferWidth(): Width = new RemWidthOf(0, 1)
 }
 
 
 class RemUSOp(left: Node, right: Node) extends RemOp(left, right) {
-  override val opSlug = "u%s"
+  override val opSlug = "remus"
 
   override def inferWidth(): Width = new RemWidthOf(1, 0)
 }
 
 
 class OrOp(left: Node, right: Node) extends BinaryOp(left, right) {
-  override val opSlug = "|"
+  override val opSlug = "or"
+  override val opInfix = "|"
 
   override def inferWidth(): Width = new maxWidth()
 }
@@ -255,14 +274,16 @@ class OrOp(left: Node, right: Node) extends BinaryOp(left, right) {
 /** Substraction operator
   */
 class SubOp(left: Node, right: Node) extends BinaryOp(left, right) {
-  override val opSlug = "-"
+  override val opSlug = "sub"
+  override val opInfix = "-"
 
   override def inferWidth(): Width = new maxWidth()
 }
 
 
 class XorOp(left: Node, right: Node) extends BinaryOp(left, right) {
-  override val opSlug = "^"
+  override val opSlug = "xor"
+  override val opInfix = "^"
 
   override def inferWidth(): Width = new maxWidth()
 }
@@ -271,7 +292,8 @@ class XorOp(left: Node, right: Node) extends BinaryOp(left, right) {
 /** Bus concatenation operator
   */
 class CatOp(left: Node, right: Node) extends BinaryOp(left, right) {
-  override val opSlug = "##"
+  override val opSlug = "cat"
+  override val opInfix = "##"
 
   override def inferWidth(): Width = new SumWidth()
 }
@@ -283,56 +305,68 @@ class LogicalOp(left: Node, right: Node) extends BinaryOp(left, right) {
 }
 
 class EqlOp(left: Node, right: Node) extends LogicalOp(left, right) {
-  override val opSlug = "=="
+  override val opSlug = "eq"
+  override val opInfix = "=="
 }
 
 
 class NeqOp(left: Node, right: Node) extends LogicalOp(left, right) {
-  override val opSlug = "!="
+  override val opSlug = "neq"
+  override val opInfix = "!="
 }
 
 
 class GteOp(left: Node, right: Node) extends LogicalOp(left, right) {
-  override val opSlug = ">="
+  override val opSlug = "gte"
+  override val opInfix = ">="
 }
 
 
 class GteSOp(left: Node, right: Node) extends GteOp(left, right) {
+  override val opSlug = "gtes"
 }
 
 
 class GtrOp(left: Node, right: Node) extends LogicalOp(left, right) {
-  override val opSlug = ">"
+  override val opSlug = "gt"
+  override val opInfix = ">"
 }
 
 
 class GtrSOp(left: Node, right: Node) extends GtrOp(left, right) {
+  override val opSlug = "gts"
 }
 
 
 class LtnOp(left: Node, right: Node) extends LogicalOp(left, right) {
-  override val opSlug = "<"
+  override val opSlug = "lt"
+  override val opInfix = "<"
 }
 
 
 class LtnSOp(left: Node, right: Node) extends LtnOp(left, right) {
+  override val opSlug = "lts"
 }
 
 
 class LteOp(left: Node, right: Node) extends LogicalOp(left, right) {
-  override val opSlug = "<="
+  override val opSlug = "lte"
+  override val opInfix = "<="
 }
 
 
 class LteSOp(left: Node, right: Node) extends LteOp(left, right) {
+  override val opSlug = "ltes"
 }
 
 class LogicalAndOp(left: Node, right: Node) extends  LogicalOp(left, right) {
-  override val opSlug = "&&"
+  override val opSlug = "andl"
+  override val opInfix = "&&"
 }
 
 class LogicalOrOp(left: Node, right: Node) extends  LogicalOp(left, right) {
-  override val opSlug = "||"
+  override val opSlug = "orl"
+  override val opInfix = "||"
 }
 
 
@@ -341,17 +375,17 @@ class ReduceOp(opand: Node) extends UnaryOp(opand) {
 }
 
 class ReduceAndOp(opand: Node) extends ReduceOp(opand) {
-  override val opSlug = "&"
+  override val opSlug = "reduceAnd"
 }
 
 
 class ReduceOrOp(opand: Node) extends ReduceOp(opand) {
-  override val opSlug = "|"
+  override val opSlug = "reduceOr"
 }
 
 
 class ReduceXorOp(opand: Node) extends ReduceOp(opand) {
-  override val opSlug = "^"
+  override val opSlug = "reduceXor"
 }
 
 

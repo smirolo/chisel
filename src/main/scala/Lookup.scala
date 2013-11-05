@@ -40,8 +40,9 @@ object Lookup {
   def apply[T <: Data](addr: UInt, default: T,
     mapping: Seq[(UInt, T)])(implicit m: reflect.ClassTag[T]): T = {
     val res = m.runtimeClass.newInstance.asInstanceOf[T]
-    res.fromBits(UInt(new Lookup(addr.node, default.toBits.node,
-      mapping.map(x => (x._1.node, x._2.toBits.node)))))
+    res.fromBits(UInt(new Lookup(addr.node.lvalue(),
+      default.toBits.node.lvalue(),
+      mapping.map(x => (x._1.node.lvalue(), x._2.toBits.node.lvalue())))))
     res
   }
 }

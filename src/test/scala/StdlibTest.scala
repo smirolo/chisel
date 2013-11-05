@@ -178,6 +178,7 @@ class StdlibSuite extends AssertionsForJUnit {
 
   /** Multiply an unsigned number by signed number */
   @Test def testMulUS() {
+    println("\ntestMulUS ...")
     try{
     class MulUS extends Module {
       val io = new Bundle {
@@ -187,8 +188,8 @@ class StdlibSuite extends AssertionsForJUnit {
       }
       io.z := io.x * io.y
     }
-    chiselMain(Array[String]("--v"),
-//      "--targetDir", tmpdir.getRoot().toString()),
+    chiselMain(Array[String]("--v",
+      "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new MulUS()))
     } catch {
       case e => { println("XXX exception: "); e.printStackTrace }
@@ -215,6 +216,7 @@ endmodule
 
   /** Divide an unsigned number by signed number */
   @Test def testDivUS() {
+    println("\ntestDivUS ...")
     class DivUS extends Module {
       val io = new Bundle {
         val x = UInt(INPUT, 32)
@@ -248,6 +250,7 @@ endmodule
 
   /** Remainer of an unsigned number by signed number */
   @Test def testRemUS() {
+    println("\ntestRemUS ...")
     class RemUS extends Module {
       val io = new Bundle {
         val x = UInt(INPUT, 32)
@@ -281,6 +284,7 @@ endmodule
 
   /** Multiply an signed number by an unsigned number */
   @Test def testMulSU() {
+    println("\ntestMulSU ...")
     class MulSU extends Module {
       val io = new Bundle {
         val x = SInt(INPUT, 32)
@@ -314,6 +318,7 @@ endmodule
 
   /** Divide a signed number by an unsigned number */
   @Test def testDivSU() {
+    println("\ntestDivSU ...")
     class DivSU extends Module {
       val io = new Bundle {
         val x = SInt(INPUT, 32)
@@ -347,6 +352,7 @@ endmodule
 
   /** Remainer of a signed number by an unsigned number */
   @Test def testRemSU() {
+    println("\ntestRemSU ...")
     class RemSU extends Module {
       val io = new Bundle {
         val x = SInt(INPUT, 32)
@@ -379,7 +385,8 @@ endmodule
   }
 
   /** Assign a Bundle */
-  @Test def assignBundle() {
+  @Test def testAssignBundle() {
+    println("\ntestAssignBundle ...")
     class AssignBundle extends Bundle {
         val v = Vec.fill(2){UInt(INPUT, 2)}
     }
@@ -413,7 +420,7 @@ endmodule
   /** Concatenate two nodes X and Y in a node Z such that
     Z[0..wx+wy] = X[0..wx] :: Y[0..wy]. */
   @Test def testCat() {
-
+    println("\ntestCat ...")
     class CatComp extends Module {
       val io = new Bundle {
         val x = UInt(INPUT, 8)
@@ -431,7 +438,7 @@ endmodule
   /** Generate a lookup into an array.
     XXX Lookup.scala, use different code based on instance of CppBackend. */
   @Test def testLookup() {
-
+    println("\ntestLookup ...")
     class LookupComp extends Module {
       val io = new Bundle {
         val addr = UInt(INPUT, 8)
@@ -450,7 +457,7 @@ endmodule
   /** Generate a PopCount
     */
   @Test def testPopCount() {
-
+    println("\ntestPopCount ...")
     class PopCountComp extends Module {
       val io = new Bundle {
         val in = UInt(INPUT, 8)
@@ -467,7 +474,7 @@ endmodule
   /** Generate a Reverse
     */
   @Test def testReverse() {
-
+    println("\ntestReverse ...")
     class ReverseComp extends Module {
       val io = new Bundle {
         val in = UInt(INPUT, 8)
@@ -484,7 +491,7 @@ endmodule
   /** Generate a ShiftRegister
     */
   @Test def testShiftRegister() {
-
+    println("\ntestShiftRegister ...")
     class ShiftRegisterComp extends Module {
       val io = new Bundle {
         val in = UInt(INPUT, 8)
@@ -501,7 +508,7 @@ endmodule
   /** Generate a UIntToOH
     */
   @Test def testUIntToOH() {
-
+    println("\ntestUIntToOH ...")
     class UIntToOHComp extends Module {
       val io = new Bundle {
         val in = UInt(INPUT, 8)
@@ -520,7 +527,7 @@ endmodule
   /** Generate a foldR
     */
   @Test def testfoldR() {
-
+    println("\ntestfoldR ...")
     class foldRComp extends Module {
       val io = new Bundle {
         val in0 = UInt(INPUT, 8)
@@ -545,6 +552,7 @@ endmodule
            n: Int, count: Int, needsLock: Option[T => Bool] = None)
     */
   @Test def testArbiter() {
+    println("\ntestArbiter ...")
     class ArbiterTest extends Arbiter(SInt(width=8), 4) {
     }
 
@@ -1022,7 +1030,7 @@ endmodule
   /** Generate a PriorityMux
     */
   @Test def testPriorityMux() {
-
+    println("\ntestPriorityMux ...")
     class PriorityMuxComp extends Module {
       val io = new Bundle {
         val in0 = Bool(INPUT)
@@ -1047,7 +1055,7 @@ endmodule
   /** Generate a PriorityEncoder
     */
   @Test def testPriorityEncoder() {
-
+    println("\ntestPriorityEncoder ...")
     class PriorityEncoderComp extends Module {
       val io = new Bundle {
         val in = UInt(INPUT, 8)
@@ -1064,7 +1072,7 @@ endmodule
   /** Generate a PriorityEncoderOH
     */
   @Test def testPriorityEncoderOH() {
-
+    println("\ntestPriorityEncoderOH ...")
     class PriorityEncoderOHComp extends Module {
       val io = new Bundle {
         val in = UInt(INPUT, 8)
@@ -1201,7 +1209,7 @@ endmodule
   /** Generate a Fill
     */
   @Test def testFill() {
-
+    println("\ntestFill ...")
     class FillComp extends Module {
       val io = new Bundle {
         val in = UInt(INPUT, 8)
@@ -1218,7 +1226,7 @@ endmodule
   /** Generate a Log2
     */
   @Test def testLog2() {
-
+    println("\ntestLog2 ...")
     class Log2Comp extends Module {
       val io = new Bundle {
         val in = UInt(INPUT, 8)
@@ -1235,7 +1243,7 @@ endmodule
   /** Generate a MuxLookup
     */
   @Test def testMuxLookup() {
-
+    println("\ntestMuxLookup ...")
     class MuxLookupComp extends Module {
       val io = new Bundle {
         val key = UInt(INPUT, 8)
@@ -1258,7 +1266,7 @@ endmodule
   /** Generate a MuxCase
     */
   @Test def testMuxCase() {
-
+    println("\ntestMuxCase ...")
     class MuxCaseComp extends Module {
       val io = new Bundle {
         val default = UInt(INPUT, 8)
@@ -1298,7 +1306,7 @@ endmodule
   /** Generate a Mux
     */
   @Test def testMux() {
-
+    println("\ntestMux ...")
     class MuxComp extends Module {
       val io = new Bundle {
         val t = Bool(INPUT)
@@ -1313,5 +1321,4 @@ endmodule
       "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new MuxComp()))
   }
-
 }

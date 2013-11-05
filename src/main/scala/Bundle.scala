@@ -79,7 +79,7 @@ class Bundle extends AggregateData[String] {
 
 
   override def items(): Seq[(String, Data)] = {
-    elementsCache
+    elements
   }
 
 

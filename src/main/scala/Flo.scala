@@ -78,45 +78,15 @@ class FloBackend extends Backend {
       case x: FillOp =>
         emitDec(x) + "fill/" + node.width + " " + emitRef(node.inputs(0)) + "\n"
 
-      case o: Op =>
-        emitDec(o) +
-        (if (o.inputs.length == 1) {
-          o.name match {
-            case "~" => "not " + emitRef(node.inputs(0))
-            case "-" => "neg " + emitRef(node.inputs(0))
-            case "!" => "not " + emitRef(node.inputs(0))
-          }
-         } else {
-           o.name match {
-             case "<"  => "lt/"  + node.inputs(0).width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "<=" => "gt/"  + node.inputs(0).width + " " + emitRef(node.inputs(1)) + " " + emitRef(node.inputs(0))
-             case ">"  => "gt/"  + node.inputs(0).width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case ">=" => "lt/"  + node.inputs(0).width + " " + emitRef(node.inputs(1)) + " " + emitRef(node.inputs(0))
-             case "+"  => "add/" + node.width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "-"  => "sub/" + node.width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "*"  => "mul/" + node.width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "!"  => "not/" + node.width + " " + emitRef(node.inputs(0))
-             case "<<" => "lsh/" + node.width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case ">>" => "rsh/" + node.width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "##" => "cat/" + node.inputs(1).width + " " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "|"  => "or "  + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "||" => "or "  + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "&"  => "and " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "&&" => "and " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "^"  => "xor " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "==" => "eq "  + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-             case "!=" => "neq " + emitRef(node.inputs(0)) + " " + emitRef(node.inputs(1))
-           }
-         }) + "\n"
-
       case x: Bits =>
         if( x.inputs.length == 1 ) {
           emitDec(x) + "mov " + emitRef(x.inputs(0)) + "\n"
         } else {
           emitDec(x) + "rnd/" + x.width + "\n"
         }
-      case m: Mem[_] =>
-        emitDec(m) + "mem " + m.n + "\n"
+
+      case m: MemDelay =>
+        emitDec(m) + "mem " + m.depth + "\n"
 
       case m: MemRead =>
         emitDec(m) + "ld " + emitRef(m.mem) + " " + emitRef(m.addr) + "\n" // emitRef(m.mem)
@@ -132,6 +102,13 @@ class FloBackend extends Backend {
 
       case x: Log2Op => // TODO: log2 instruction?
         emitDec(x) + "log2/" + x.width + " " + emitRef(x.inputs(0)) + "\n"
+
+      case x: UnaryOp =>
+        emitDec(x) + x.opSlug + emitRef(node.inputs(0)) + "\n"
+
+      case x: BinaryOp =>
+          (emitDec(x) + x.opSlug + "/" + x.width
+            + " " + emitRef(x.left) + " " + emitRef(x.right)) + "\n"
 
       case _ =>
         ""

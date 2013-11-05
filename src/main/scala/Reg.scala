@@ -106,17 +106,16 @@ object Reg {
         <- res.flatten zip d zip init.flatten) {
         assert(rval_i.getWidth > 0,
           {ChiselError.error("Negative width to wire " + res_i)})
-        val reg = new RegDelay()
-        reg.inputs.append(data_i.node)
-        reg.inputs.append(rval_i.node)
-        // make output
+        val reg = new RegDelay(
+          if( data_i != null ) data_i.node else null,
+          if( rval_i != null ) rval_i.node else null)
+        reg.clock = clock
         reg.isReset = true
         res_i.node = reg
       }
     } else {
       for(((res_n, res_i), (data_n, data_i)) <- res.flatten zip d) {
-        val reg = new RegDelay()
-        reg.inputs.append(data_i.node)
+        val reg = new RegDelay(if( data_i != null ) data_i.node else null)
         reg.clock = clock
         res_i.node = reg
       }
@@ -147,6 +146,7 @@ object RegInit {
 /** XXX Should extends Data or up. we are looking for an easy way to compile
 here. */
 class Reg extends Bits {
+//class Reg[T <: Data] extends nameable {
   def isUpdate: Boolean = !(node.asInstanceOf[RegDelay].next == null);
  /* XXX def update (x: Node) { inputs(0) = x }; */
   var assigned = false;

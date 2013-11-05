@@ -619,7 +619,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
       if (newDepth == -1) {
         comp.omods += node;
       } else {
-        node.depth = max(node.depth, newDepth);
+        node.visitDepth = max(node.visitDepth, newDepth);
         if (!comp.isWalked.contains(node)) {
           comp.isWalked += node;
           node.walked = true;
@@ -672,7 +672,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
       }
     }
     for (m <- imods)
-      maxDepth = max(m.depth, maxDepth);
+      maxDepth = max(m.visitDepth, maxDepth);
     // for ((n, c) <- hist)
     ChiselError.info("%6s: %s".format("name", "count"));
     for (n <- hist.keys.toList.sortWith((a, b) => a < b))
@@ -684,7 +684,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
     for (i <- 0 until maxDepth + 1)
       widths(i) = 0;
     for (m <- imods)
-      widths(m.depth) = widths(m.depth) + 1;
+      widths(m.visitDepth) = widths(m.visitDepth) + 1;
     var numNodes = 0;
     for (m <- imods)
       numNodes += 1;

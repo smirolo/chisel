@@ -88,6 +88,9 @@ class IOBound(var dir: IODirection = NODIRECTION,
     this
   }
 
+  override def assigned: Boolean =
+    (this.inputs.length > 0 && this.inputs(0) != null)
+
   override def asInput(): this.type = {
     dir = INPUT
     this
@@ -115,6 +118,12 @@ class IOBound(var dir: IODirection = NODIRECTION,
 
   def isDirectionless: Boolean = {
     return dir == NODIRECTION
+  }
+
+  override def rvalue( value: Node ): Node = {
+    inputs.clear()
+    inputs.append(value)
+    this
   }
 
   def target: Node = inputs(0)

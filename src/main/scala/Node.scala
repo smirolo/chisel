@@ -53,7 +53,7 @@ abstract class Node extends nameable {
 
   /* Assigned in Binding and Mod.reset */
   var component: Module = Module.getComponent();
-  var depth = 0;
+  var visitDepth = 0;
   def componentOf: Module = if (Module.isEmittingComponents && component != null) component else Module.topComponent
   var width = -1;
   var index = -1;
@@ -70,13 +70,15 @@ abstract class Node extends nameable {
 
   var isScanArg = false
   var isPrintArg = false
-  def isMemOutput: Boolean = false
   var prune = false
   var driveRand = false
+  //XXX move to Delay
   var clock: Clock = null
 
-  /* XXX used in Verilog code generator. */
+  //XXX used in Verilog code generator:
   var isSigned: Boolean = false
+
+  def assigned: Boolean = false
 
   def inferWidth(): Width
 
@@ -91,20 +93,7 @@ abstract class Node extends nameable {
 
   def clearlyEquals(x: Node): Boolean = this == x
 
-/*
-  // TODO: SHOULD AGREE WITH isLit
-  def signed: this.type = {
-    val res = SInt()
-    res := this.asInstanceOf[SInt];
-    res.isSigned = true;
-    res.asInstanceOf[this.type]
-  }
-
-  def bitSet(off: UInt, dat: UInt): UInt = {
-    val bit = UInt(1, 1) << off;
-    (this.asInstanceOf[UInt] & ~bit) | (dat << off);
-  }
-*/
+/* XXX deprecated
   // TODO: MOVE TO WIRE
   def assign(src: Node) {
     if (inputs.length > 0) {
@@ -113,7 +102,7 @@ abstract class Node extends nameable {
       inputs += src;
     }
   }
-
+ */
   def asDirectionless(): this.type = this
 
   def asInput(): this.type = this
@@ -143,6 +132,17 @@ abstract class Node extends nameable {
   def isInVCD: Boolean = width > 0 &&
     ((isIo && isInObject) || isReg || (Module.isDebug && !name.isEmpty))
 
+
+  /** Returns the lvalue associated with the node */
+  def lvalue(): Node = this
+
+
+  /** Assign and returns the rvalue associated with the node */
+  def rvalue( value: Node ): Node = {
+    ChiselError.error("cannot assign to wire net")
+    this
+  }
+
   /** Prints all members of a node and recursively its inputs up to a certain
     depth level. This method is purely used for debugging. */
   def printTree(writer: PrintStream, depth: Int = 4, indent: String = ""): Unit = {
@@ -158,7 +158,6 @@ abstract class Node extends nameable {
     writer.println("isClkInput: " + isClkInput)
     writer.println("isScanArg: " + isScanArg)
     writer.println("isPrintArg: " + isPrintArg)
-    writer.println("isMemOutput: " + isMemOutput)
     for (in <- inputs) {
       if (in == null) {
         writer.println("null");
@@ -212,33 +211,25 @@ abstract class Node extends nameable {
   }
   */
 
-/* XXX deprecated:
-  def maybeFlatten: Seq[Node] = {
-    this match {
-      case b: Bundle =>
-        val buf = ArrayBuffer[Node]();
-        for ((n, e) <- b.flatten) buf += e.node;
-        buf
-      case o        =>
-        Array[Node](getNode);
-    }
-  }
- */
-
   override def toString(): String = {
     var sep = ""
     val str = new StringBuilder
     str.append(uniqueName + " = " + getClass.getName + "(")
     for( inp <- inputs ) {
-      str.append(sep + inp.uniqueName + "/*" + inp.getClass.getName
-        + " in " + (if (inp.component != null) inp.component.getClass.getName
-        else "?") + "*/")
+      if( inp != null ) {
+        str.append(sep + inp.uniqueName + "/*" + inp.getClass.getName
+          + " in " + (if (inp.component != null) inp.component.getClass.getName
+          else "?") + "*/")
+      } else {
+        str.append(sep + "null")
+      }
       sep = ", "
     }
+    str.append(")")
     str.toString
   }
 
   def uniqueName(): String = {
-    if( name != null ) name else "T" + hashCode.toString
+    if( !name.isEmpty ) name else ("T" + hashCode.toString)
   }
 }

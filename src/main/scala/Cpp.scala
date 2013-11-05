@@ -98,9 +98,8 @@ class CppBackend extends Backend {
   def emitWordRef(node: Node, w: Int): String = {
     node match {
       case x: IOBound =>
-        emitWordRef(x.inputs(0), w)
-      case x: Bits =>
-        if (!node.isInObject && node.inputs.length == 1) emitWordRef(node.inputs(0), w) else wordMangle(node, w)
+        (if (!node.isInObject && node.inputs.length > 0)
+          emitWordRef(node.inputs(0), w) else wordMangle(node, w))
       case _ =>
         wordMangle(node, w)
     }
@@ -112,13 +111,11 @@ class CppBackend extends Backend {
         ""
       case x: Literal =>
         ""
-      case x: Reg =>
+      case x: RegDelay =>
         "  dat_t<" + node.width + "> " + emitRef(node) + ";\n" +
         "  dat_t<" + node.width + "> " + emitRef(node) + "_shadow;\n";
-      case m: Mem[_] =>
-        "  mem_t<" + m.width + "," + m.n + "> " + emitRef(m) + ";\n"
-      case r: ROM[_] =>
-        "  mem_t<" + r.width + "," + r.lits.length + "> " + emitRef(r) + ";\n"
+      case m: MemDelay =>
+        "  mem_t<" + m.width + "," + m.depth + "> " + emitRef(m) + ";\n"
       case c: Clock =>
         "  int " + emitRef(node) + ";\n" +
         "  int " + emitRef(node) + "_cnt;\n";
@@ -606,11 +603,6 @@ class CppBackend extends Backend {
           + " = " + emitRef(m.mem) + ".get(" + emitLoWordRef(m.addr) + ", "
           + i + ")"))
 
-      case r: ROMRead[_] =>
-        emitTmpDec(r) + block((0 until words(r)).map(i => emitWordRef(r, i)
-          + " = " + emitRef(r.rom) + ".get(" + emitLoWordRef(r.addr) + ", "
-          + i + ")"))
-
       case reg: RegDelay =>
         def updateData(w: Int): String = if (reg.isReset) "TERNARY(" + emitLoWordRef(reg.inputs.last) + ", " + emitWordRef(reg.init, w) + ", " + emitWordRef(reg.next, w) + ")" else emitWordRef(reg.next, w)
 
@@ -643,7 +635,7 @@ class CppBackend extends Backend {
 
   def emitDefHi(node: Node): String = {
     node match {
-      case reg: Reg =>
+      case reg: RegDelay =>
         "  " + emitRef(reg) + " = " + emitRef(reg) + "_shadow;\n"
       case _ => ""
     }
@@ -660,20 +652,19 @@ class CppBackend extends Backend {
       case x: RegDelay =>
         "  if (rand_init) " + emitRef(node) + ".randomize();\n"
 
-      case x: Mem[_] =>
+      case x: MemDelay =>
         "  if (rand_init) " + emitRef(node) + ".randomize();\n"
 
       case r: ROM[_] =>
         r.lits.zipWithIndex.map { case (lit, i) =>
           block((0 until words(r)).map(j => emitRef(r) + ".put(" + i + ", " + j + ", " + emitWordRef(lit, j) + ")"))
         }.reduceLeft(_ + _)
-      case u: Bits => 
+
+      case u: Node =>
         if (u.driveRand && u.isInObject)
           "  if (rand_init) " + emitRef(node) + ".randomize();\n"
         else
           ""
-      case _ =>
-        ""
     }
   }
 

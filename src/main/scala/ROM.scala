@@ -34,21 +34,18 @@ import ChiselError._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Stack
 
-class ROM[T <: Data](val lits: Seq[Literal], gen: (Int) => T) extends Vec[T](gen) {
-
-  // XXX Should we infer width on ROMs?
-  // XXX connect inputs?  this.init("", , lits: _*)
-
-  def read(addr: UInt): T = {
-    val cln = gen(0)
-    val data = cln.asOutput
-    var port = new ROMRead(addr.node, this.toBits.node)
-    port.width = lits.head.width
-// XXX temporarily removed:    data assign port
-    data
+object ROM {
+  def apply[T <: Data](lits: Seq[T]): ROM[T] = {
+    new ROM[T](() => lits.head,
+      lits.map(x => x.toBits.node.asInstanceOf[Literal]))
   }
+}
 
-  def write(addr: UInt, data: T) {
+
+class ROM[T <: Data](gen: () => T, val lits: Seq[Literal])
+    extends Mem[T](gen, lits.length, false, true) {
+
+  override def write(addr: UInt, data: T) {
     ChiselError.error("Can't write to ROM")
   }
 
@@ -60,17 +57,5 @@ class ROM[T <: Data](val lits: Seq[Literal], gen: (Int) => T) extends Vec[T](gen
     }
   }
 
-  def isReg: Boolean = true
   def isInVCD = false
-}
-
-
-class ROMRead[T <: Data](addrV: Node, romV: Node) extends Node {
-  this.inputs.append(addrV)
-  this.inputs.append(romV)
-
-  def inferWidth(): Width = new WidthOf(0)
-
-  def addr: Node = inputs(0)
-  def rom: Node = inputs(1)
 }

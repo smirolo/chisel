@@ -53,6 +53,8 @@ abstract class Backend {
   /* Set of keywords which cannot be used as node and component names. */
   val keywords: HashSet[String];
 
+  var traversalIndex = 0
+
   def createOutputFile(name: String): java.io.FileWriter = {
     val baseDir = ensureDir(Module.targetDir)
     new java.io.FileWriter(baseDir + name)
@@ -303,7 +305,6 @@ abstract class Backend {
       if (!node.component.nodes.contains(node))
         node.component.nodes += node
       for (input <- node.inputs) {
-        println("XXX [collectNodesIntoComp] " + node)
         if(!walked.contains(input)) {
           if( input.component == null ) {
             input.component = curComp
@@ -388,8 +389,8 @@ abstract class Backend {
 
   def levelChildren(root: Module) {
     root.level = 0;
-    root.traversal = VerilogBackend.traversalIndex;
-    VerilogBackend.traversalIndex = VerilogBackend.traversalIndex + 1;
+    root.traversal = traversalIndex;
+    traversalIndex = traversalIndex + 1;
     for(child <- root.children) {
       levelChildren(child)
       root.level = math.max(root.level, child.level + 1);
