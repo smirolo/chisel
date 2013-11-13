@@ -52,9 +52,9 @@ abstract class Node extends nameable {
   var walked = false;
 
   /* Assigned in Binding and Mod.reset */
-  var component: Module = Module.getComponent();
+  var component: Module = Module.scope.topModule
   var visitDepth = 0;
-  def componentOf: Module = if (Module.isEmittingComponents && component != null) component else Module.topComponent
+  def componentOf: Module = if (Module.isEmittingComponents && component != null) component else Module.scope.topModule
   var width = -1;
   var index = -1;
   var isFixedWidth = false;
@@ -72,15 +72,17 @@ abstract class Node extends nameable {
   var isPrintArg = false
   var prune = false
   var driveRand = false
-  //XXX move to Delay
-  var clock: Clock = null
+
+  /* XXX This field should really be in Delay.
+   It is used by Backend.createClockDomain for unknown purpose. */
+//XXX  var clock: Update = null
 
   //XXX used in Verilog code generator:
   var isSigned: Boolean = false
 
   def assigned: Boolean = false
 
-  def inferWidth(): Width
+  var inferWidth: Width = null
 
   def nameIt( path: String ): this.type = {
     if( !named ) {
@@ -114,7 +116,9 @@ abstract class Node extends nameable {
   private var _isIo = false
   def isIo = _isIo
   def isIo_=(isIo: Boolean) = _isIo = isIo
-  def isReg: Boolean = false;
+
+  def isReg: Boolean = this.isInstanceOf[Delay]
+
   def isUsedByRam: Boolean = {
     for (c <- consumers)
       if (c.isRamWriteInput(this)) {
@@ -211,15 +215,21 @@ abstract class Node extends nameable {
   }
   */
 
+  def slug: String = getClass.getName
+
   override def toString(): String = {
     var sep = ""
     val str = new StringBuilder
-    str.append(uniqueName + " = " + getClass.getName + "(")
+    str.append(uniqueName
+// XXX      + (if (component != null) "/*" + component.name + "*/" else "")
+      + " = " + this.slug + "(")
     for( inp <- inputs ) {
       if( inp != null ) {
-        str.append(sep + inp.uniqueName + "/*" + inp.getClass.getName
-          + " in " + (if (inp.component != null) inp.component.getClass.getName
-          else "?") + "*/")
+        str.append(sep + inp.uniqueName
+//          + "/*" + inp.getClass.getName
+//          + " in " + (if (inp.component != null) inp.component.getClass.getName
+//          else "?") + "*/"
+        )
       } else {
         str.append(sep + "null")
       }
@@ -230,6 +240,7 @@ abstract class Node extends nameable {
   }
 
   def uniqueName(): String = {
-    if( !name.isEmpty ) name else ("T" + hashCode.toString)
+    (if( !name.isEmpty ) name else ("T" + hashCode.toString)
+      + "[" + width + "]")
   }
 }

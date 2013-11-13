@@ -71,9 +71,8 @@ object ListLookup {
 class ListLookup(addrN: Node, default: List[Node],
     val map: Seq[(Node, List[Node])]) extends Node {
 
-  def inferWidth(): Width = new WidthOf(1)
-
-  inputs.append(addr)
+  inferWidth = new WidthOf(1)
+  inputs.append(addrN)
   inputs ++ default
   map.map(x => { inputs.append(x._1); x._2.map(inputs.append(_)) })
 
@@ -84,6 +83,6 @@ class ListLookup(addrN: Node, default: List[Node],
 
 
 class ListLookupRef(addr: Node, index: Int) extends Node {
-  def inferWidth(): Width = new WidthOf(0)
+  inferWidth = new WidthOf(0)
 }
 

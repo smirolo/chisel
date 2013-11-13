@@ -35,10 +35,11 @@ import scala.collection.mutable.ArrayBuffer
 import ChiselError._
 
 class Assert(condArg: Node, val message: String) extends Node {
-  inputs += condArg;
-  def cond: Node = inputs(0);
 
-  def inferWidth(): Width = new FixedWidth(1)
+  inferWidth = new FixedWidth(1)
+  inputs += condArg;
+
+  def cond: Node = inputs(0);
 }
 
 
@@ -46,7 +47,7 @@ class BitsInObject(x: Node) extends Node {
   inputs += x
   override def isInObject: Boolean = true
 
-  def inferWidth(): Width = new FixedWidth(1)
+  inferWidth = new FixedWidth(1)
 }
 
 class PrintfBase(formatIn: String, argsIn: Seq[Node]) extends Node {
@@ -89,7 +90,7 @@ class PrintfBase(formatIn: String, argsIn: Seq[Node]) extends Node {
     msg
   }
 
-  override def inferWidth(): Width = new PrintfWidth(format, formats)
+  inferWidth = new PrintfWidth(format, formats)
 }
 
 class Sprintf(formatIn: String, argsIn: Seq[Node]) extends PrintfBase(formatIn, argsIn)

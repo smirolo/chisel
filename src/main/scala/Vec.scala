@@ -301,7 +301,7 @@ class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
       this(i) := src(i)
   }
 
-  override def nameIt (path: String) {
+  override def nameIt (path: String): this.type = {
     if( !named
       && (name.isEmpty
         || (!path.isEmpty && name != path)) ) {
@@ -322,6 +322,7 @@ class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
     } else {
       /* We are trying to rename a Vec that has a fixed name. */
     }
+    this
   }
 
   override def clone(): this.type = {
@@ -333,6 +334,20 @@ class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
     val reversed = this.reverse.map(_.toBits)
     Cat(reversed.head, reversed.tail: _*)
   }
+
+
+  override def toString: String = {
+    var sep = ""
+    val str = new StringBuilder
+    str.append("[")
+    for( (key, value) <- items ) {
+      str.append(sep + value)
+      sep = ", "
+    }
+    str.append("]")
+    str.toString
+  }
+
 
   def forall(p: T => Bool): Bool = (this map p).fold(Bool(true))(_&&_)
   def exists(p: T => Bool): Bool = (this map p).fold(Bool(false))(_||_)

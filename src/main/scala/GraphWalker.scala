@@ -49,6 +49,16 @@ class GraphVisitor {
   def finish( node: Node ): Unit = {}
 }
 
+/** Aggregates all nodes of type T in topological order.
+  */
+class ByClassVisitor[T <: Node](implicit m: Manifest[T]) extends GraphVisitor {
+
+  val items = new ArrayBuffer[T]()
+
+  override def start( node: Node ): Unit = {
+    if( m.erasure.isInstance(node) ) items += node.asInstanceOf[T]
+  }
+}
 
 
 class NoCircleGraphVisitor extends GraphVisitor {
@@ -59,6 +69,10 @@ class NoCircleGraphVisitor extends GraphVisitor {
 
 
 object GraphWalker {
+
+  def except[T <: Node](node: Node)(implicit m: Manifest[T]): Boolean = {
+    node != null && !m.erasure.isInstance(node)
+  }
 
   def anyNode(node: Node): Boolean = {
     /* Assignments are using Muxes with dangling pointers

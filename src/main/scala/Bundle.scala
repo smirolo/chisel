@@ -159,7 +159,7 @@ class Bundle extends AggregateData[String] {
     elementsCache = elts; this
   }
 
-  override def nameIt (path: String) {
+  override def nameIt (path: String): this.type = {
     if( !named
       && (name.isEmpty
         || (!path.isEmpty && name != path)) ) {
@@ -171,6 +171,7 @@ class Bundle extends AggregateData[String] {
     } else {
       /* We are trying to rename a Bundle that has a fixed name. */
     }
+    this
   }
 
   def +(other: Bundle): Bundle = {

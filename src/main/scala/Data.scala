@@ -54,9 +54,9 @@ abstract class Data extends nameable {
 
   /* Component this AST Data Type belongs to. We use it
    in the <> operator to bind nodes. */
-  val component: Module = Module.getComponent();
+  val component: Module = Module.scope.topModule
 
-  def nameIt(name: String) {}
+  def nameIt(name: String): this.type
 
   def getWidth(): Int
 
@@ -94,6 +94,8 @@ abstract class Data extends nameable {
 
   def apply(name: String): Data = null
  */
+
+  def nodes(): Seq[Node]
 
   def flatten: Array[(String, Bits)] = Array[(String, Bits)]();
 
@@ -166,12 +168,6 @@ abstract class Data extends nameable {
         throwException("Parameterized Bundle " + this.getClass + " needs clone method", e)
     }
   }
-
-/*
-  def setWidth(w: Int) {
-    this.width = w;
-  }
- */
 
   def ^^(src: Data): Unit = {}
   def <>(src: Data): Unit = {}

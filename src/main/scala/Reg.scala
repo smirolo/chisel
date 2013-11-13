@@ -76,7 +76,7 @@ object Reg {
     respectively.
     */
   def apply[T <: Data](outType: T = null, next: T = null, init: T = null,
-    clock: Clock = null): T = {
+    clock: Clock = Module.scope.clock, reset: Bool = Module.scope.reset): T = {
     var mType = outType
     if(mType == null) {
       mType = next
@@ -100,6 +100,7 @@ object Reg {
 
     // asOutput flip the direction and returns this.
     val res = gen.asOutput
+    println("XXX [Reg] res=" + res)
 
     if(init != null) {
       for((((res_n, res_i), (data_n, data_i)), (rval_n, rval_i))
@@ -107,16 +108,21 @@ object Reg {
         assert(rval_i.getWidth > 0,
           {ChiselError.error("Negative width to wire " + res_i)})
         val reg = new RegDelay(
+          clock.node.asInstanceOf[Update],
           if( data_i != null ) data_i.node else null,
-          if( rval_i != null ) rval_i.node else null)
-        reg.clock = clock
-        reg.isReset = true
+          if( rval_i != null ) rval_i.node else null,
+          reset.node)
+        reg.inferWidth = res_i.node.inferWidth
         res_i.node = reg
       }
     } else {
       for(((res_n, res_i), (data_n, data_i)) <- res.flatten zip d) {
-        val reg = new RegDelay(if( data_i != null ) data_i.node else null)
-        reg.clock = clock
+        val reg = new RegDelay(
+          clock.node.asInstanceOf[Update],
+          if( data_i != null ) data_i.node else null,
+          null,
+          reset.node)
+        reg.inferWidth = res_i.node.inferWidth
         res_i.node = reg
       }
     }
@@ -143,37 +149,3 @@ object RegInit {
 
 }
 
-/** XXX Should extends Data or up. we are looking for an easy way to compile
-here. */
-class Reg extends Bits {
-//class Reg[T <: Data] extends nameable {
-  def isUpdate: Boolean = !(node.asInstanceOf[RegDelay].next == null);
- /* XXX def update (x: Node) { inputs(0) = x }; */
-  var assigned = false;
-  var enable = Bool(false);
-
-/* XXX   override def isReg: Boolean = true; */
-
-  override def procAssign(src: Node) {
-    super.procAssign(src)
-    val cond = Bool(Module.scope.genCond())
-    if (Module.scope.conds.length >= 1) {
-      node.asInstanceOf[RegDelay].isEnable = true
-      enable = enable || cond;
-    }
-  }
-
-
-  def nameOpt: String = if (name.length > 0) name else "REG"
-  override def toString: String = {
-    "REG(" + nameOpt + ")"
-  }
-
-/* XXX deprecated
-  override def forceMatchingWidths {
-    if (inputs(0).width != width) {
-      inputs(0) = inputs(0).matchWidth(width)
-    }
-  }
- */
-}

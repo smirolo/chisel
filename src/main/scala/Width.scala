@@ -62,6 +62,7 @@ class FixedWidth(width: Int) extends Width {
   override def forward(node: Node): Boolean = {
     val update = (node.width != width)
     if( update ) node.width = width
+//    println("XXX [FixedWidth(" + width + ")] " + node)
     update
   }
 
@@ -78,12 +79,12 @@ class FixedWidth(width: Int) extends Width {
 class WidthOf(index: Int, offset: Int = 0) extends Width {
 
   override def forward(node: Node): Boolean = {
-//    println("XXX [WidthOf("+index+")] node: " + node)
     /* IO nodes might or might not be connected. */
     val width = (if ( node.inputs.length > index )
       node.inputs(index).width + offset else node.width)
     val update = (node.width != width)
     if( update ) node.width = width
+//    println("XXX [WidthOf(" + index + "," + offset +")] " + node)
     update
   }
 
@@ -108,6 +109,7 @@ class maxWidth(offset: Int = 0) extends Width {
     val width = node.inputs.map(_.width).max + offset
     val update = (node.width != width)
     if( update ) node.width = width
+//    println("XXX [maxWidth(" + offset +")] " + node)
     update
   }
 
@@ -127,6 +129,7 @@ class maxToFixedWidth(width: Int) extends Width {
   override def forward(node: Node): Boolean = {
     val update = (node.width != width)
     if( update ) node.width = width
+//    println("XXX [maxToFixedWidth(" + width +")] " + node)
     update
   }
 
@@ -148,6 +151,7 @@ class minWidth(offset: Int = 0) extends Width {
     val width = node.inputs.map(_.width).min - offset
     val update = (node.width != width)
     if( update ) node.width = width
+//    println("XXX [minWidth(" + offset +")] " + node)
     update
   }
 
@@ -167,6 +171,7 @@ class SumWidth(offset: Int = 0) extends Width {
       width = width + i.width;
     val update = (node.width != width)
     if( update ) node.width = width
+//    println("XXX [SumWidth(" + offset +")] " + node)
     update
   }
 
@@ -185,6 +190,7 @@ class lshWidthOf(index: Int, n: Node) extends Width {
     val width = node.inputs(index).width + (1 << n.width)
     val update = (node.width != width)
     if( update ) node.width = width
+//    println("XXX [lshWidthOf(" + index +")] " + node)
     update
   }
 
@@ -202,6 +208,7 @@ class rshWidthOf(index: Int, n: Node) extends Width {
     val width = node.inputs(index).width - (1 << n.width)
     val update = (node.width != width)
     if( update ) node.width = width
+//    println("XXX [rshWidthOf(" + index +")] " + node)
     update
   }
 
@@ -219,6 +226,7 @@ class RemWidthOf(first: Int, second: Int) extends Width {
     val width = node.inputs(first).width.min(node.inputs(second).width - 1)
     val update = (node.width != width)
     if( update ) node.width = width
+//    println("XXX [RemWidthOf(" + first +")] " + node)
     update
   }
 
@@ -239,6 +247,7 @@ class PrintfWidth(format: String, formats: String) extends Width {
     val width = 8*(format.length - 2*formats.length + argLength)
     val update = (node.width != width)
     if( update ) node.width = width
+//    println("XXX [PrintfWidth(" + format + ", " + formats +")] " + node)
     update
   }
 

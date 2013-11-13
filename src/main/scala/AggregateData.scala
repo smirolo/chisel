@@ -39,6 +39,10 @@ abstract class AggregateData[Key] extends Data {
 
   def items(): Seq[(Key, Data)]
 
+  def nodes(): Seq[Node] = {
+    this.flatten.map(x => x._2.node)
+  }
+
   override def asDirectionless(): this.type = {
     items().foreach(_._2.asDirectionless)
     this
@@ -62,6 +66,18 @@ abstract class AggregateData[Key] extends Data {
   def getWidth(): Int = {
     // XXX implement correctly
     -1
+  }
+
+  override def toString: String = {
+    var sep = ""
+    val str = new StringBuilder
+    str.append("{")
+    for( (key, value) <- items ) {
+      str.append(sep + key + ":" + value)
+      sep = ", "
+    }
+    str.append("}")
+    str.toString
   }
 
 }

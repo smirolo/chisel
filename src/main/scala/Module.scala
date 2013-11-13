@@ -47,7 +47,16 @@ object Module {
    have no arguments yet should not be used to generate C++ or Verilog code. */
   val keywords = HashSet[String]("test")
 
-  var scope: Scope = null
+  var _scope: Scope = null
+
+  def scope(): Scope = {
+    if( _scope == null ) {
+      _scope = new Scope()
+//XXX Because we add clocks to module inside the Clock constructor.      _scope.initImplicits()
+    }
+    _scope
+  }
+
 /*
 object Node {
   def sprintf(message: String, args: Node*): Bits = {
@@ -98,14 +107,8 @@ object Node {
   var chiselOneHotBitMap = new HashMap[(Bits, Int), Bool]
   var chiselAndMap = new HashMap[(Bits, Bits), Bool]
   var searchAndMap = true
-  val compStack = new Stack[Module]();
-  var stackIndent = 0;
-  var printStackStruct = ArrayBuffer[(Int, Module)]();
   val printfs = ArrayBuffer[Printf]()
   val randInitIOs = new ArrayBuffer[Node]()
-  val clocks = new ArrayBuffer[Clock]()
-  var implicitReset: Bool = null
-  var implicitClock: Clock = null
 
   /* Any call to a *Module* constructor without a proper wrapping
    into a Module.apply() call will be detected when trigger is false. */
@@ -117,7 +120,7 @@ object Node {
      a *this* pointer before then, yet we need to store it before the subclass
      constructors are built. */
     val res = c
-    pop()
+    Module.scope.pop()
     for ((n, io) <- res.wires) {
       io.isIo = true
     }
@@ -128,7 +131,7 @@ object Node {
 
   def initChisel () {
     ChiselError.clear();
-    Module.scope = new Scope()
+    Module._scope = null
     warnInputs = false
     warnOutputs = false
     saveWidthWarnings = false
@@ -150,10 +153,7 @@ object Node {
     tester = null;
     targetDir = "."
     components.clear();
-    compStack.clear();
-    stackIndent = 0;
     printfs.clear();
-    printStackStruct.clear();
     resetList.clear()
     muxes.clear();
     blackboxes.clear();
@@ -170,12 +170,6 @@ object Node {
     backend = new CppBackend
     topComponent = null;
     randInitIOs.clear()
-    clocks.clear()
-    implicitReset = Bool(INPUT)
-    implicitReset.node.isIo = true
-    implicitReset.node.nameIt("reset")
-    implicitClock = new Clock()
-    implicitClock.nameIt("clk")
 
     /* Re-initialize global variables defined in object Node {} */
     nodes.clear()
@@ -194,41 +188,16 @@ object Node {
     }
   }
 
-  private def push(c: Module) {
-    if( !Module.trigger ) {
-      ChiselError.error(
-        c.getClass.getName + " was not properly wrapped into a module() call.")
-    }
-    Module.trigger = false
-    compStack.push(c);
-    printStackStruct += ((stackIndent, c));
-    stackIndent += 1;
-  }
-
-  def pop(){
-    val c = compStack.pop;
-    if( !compStack.isEmpty ) {
-      val dad = compStack.top;
-      c.parent = dad;
-      dad.children += c;
-    }
-    stackIndent -= 1;
-    c.level = 0;
-    for(child <- c.children) {
-      c.level = math.max(c.level, child.level + 1);
-    }
-  }
-
-  def getComponent(): Module = if(compStack.length != 0) compStack.top else null
-
   def setAsTopComponent(mod: Module) {
     topComponent = mod;
+/* XXX deprecated?
     implicitReset.node.component = topComponent
     implicitClock.component = topComponent
     topComponent.reset = Module.implicitReset
     topComponent.hasExplicitReset = true
     topComponent.clock = Module.implicitClock
-    topComponent.hasExplicitClock = true    
+    topComponent.hasExplicitClock = true
+ */
   }
 }
 
@@ -242,7 +211,7 @@ object Node {
          ( + ) sets the default reset signal
          ( + ) overriden if Delay specifies its own clock w/ reset != implicitReset
 */
-abstract class Module(var clock: Clock = null, private var _reset: Bool = null) {
+abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
   /** A backend(Backend.scala) might generate multiple module source code
     from one Module, based on the parameters to instanciate the component
     instance. Since we do not want to blindly generate one module per instance
@@ -261,7 +230,6 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
   val bindings = new ArrayBuffer[IOBound];
   var wiresCache: Array[(String, Bits)] = null;
   var parent: Module = null;
-  var containsReg = false;
   val children = new ArrayBuffer[Module];
   val debugs = HashSet[Node]();
 
@@ -273,14 +241,14 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
   var defaultWidth = 32;
   var pathParent: Module = null;
   var verilog_parameters = "";
-  val clocks = new ArrayBuffer[Clock]
+  val clks = new ArrayBuffer[Clock]
   val resets = new HashMap[Node, Node]
 
   def hasReset = !(reset == null)
   def hasClock = !(clock == null)
 
   components += this;
-  push(this);
+  Module.scope.push(this);
 
   var hasExplicitClock = !(clock == null)
   var hasExplicitReset = !(_reset == null)
@@ -409,8 +377,19 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
   }
 
   def addClock(clock: Clock) {
-    if (!this.clocks.contains(clock))
-      this.clocks += clock
+    if (!this.clks.contains(clock))
+      this.clks += clock
+  }
+
+  def clocks(tree: Boolean = false): Seq[Update] = {
+    val clks = new ByClassVisitor[Update]()
+    GraphWalker.depthFirst(io.nodes, clks,
+      if( tree ) GraphWalker.anyNode else GraphWalker.except[IOBound])
+    clks.items
+  }
+
+  def clocks: Seq[Update] = {
+    clocks(tree=true)
   }
 
   // returns the pin connected to the reset signal, creates a new one if 
@@ -487,7 +466,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
   }
 
   def inferAll(): Int = {
-    GraphWalker.tarjan(outputs(), {node => node.inferWidth().forward(node)})
+    GraphWalker.tarjan(outputs(), {node => node.inferWidth.forward(node)})
 
     def verify(nodesList: Seq[Node]) {
       var hasError = false
@@ -524,14 +503,15 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
   //          component's explicit reset
   //          delay's explicit clock's reset
   //          component's clock's reset
+/*
   def addClockAndReset {
-    bfs {x => 
+    bfs {x =>
       {
         if (x.isInstanceOf[Delay]) {
           val clock = if (x.clock == null) x.component.clock else x.clock
           if (x.isInstanceOf[RegDelay] && x.asInstanceOf[RegDelay].isReset ||
-              x.isInstanceOf[Mem[ _ ]] && !Module.isInlineMem) { // assign resets to regs
-            val reset = 
+              x.isInstanceOf[MemDelay] && !x.asInstanceOf[MemDelay].isInline) { // assign resets to regs
+            val reset =
               if (x.component.hasExplicitReset)
                 x.component._reset
               else if (x.clock != null)
@@ -551,6 +531,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
       }
     }
   }
+ */
 
   def findConsumers() {
     for (m <- mods) {
@@ -616,19 +597,22 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
     while (stack.length > 0) {
       val (newDepth, node) = stack.pop();
       val comp = node.componentOf;
-      if (newDepth == -1) {
-        comp.omods += node;
-      } else {
-        node.visitDepth = max(node.visitDepth, newDepth);
-        if (!comp.isWalked.contains(node)) {
-          comp.isWalked += node;
-          node.walked = true;
-          stack.push((-1, node));
-          for (i <- node.inputs) {
-            if (i != null) {
-              i match {
-                case d: Delay       => ;
-                case o              => stack.push((newDepth + 1, o));
+      if( comp != null ) {
+        // XXX What to do when the node is not part of any components?
+        if (newDepth == -1) {
+          comp.omods += node;
+        } else {
+          node.visitDepth = max(node.visitDepth, newDepth);
+          if (!comp.isWalked.contains(node)) {
+            comp.isWalked += node;
+            node.walked = true;
+            stack.push((-1, node));
+            for (i <- node.inputs) {
+              if (i != null) {
+                i match {
+                  case d: Delay       => ;
+                  case o              => stack.push((newDepth + 1, o));
+                }
               }
             }
           }
@@ -711,6 +695,14 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
     }
   }
 
+  /** Returns true if this module contains at least one reachable
+    register. */
+  def containsReg: Boolean = {
+    val delays = new ByClassVisitor[Delay]()
+    GraphWalker.depthFirst(io.nodes, delays, GraphWalker.except[IOBound])
+    delays.items.length > 0
+  }
+
   /** Returns true if this module or any of its children contains
     at least one register. */
   def containsRegInTree: Boolean = {
@@ -742,28 +734,8 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
         && isPublic(m.getModifiers()) && !(Module.keywords contains name)) {
          val o = m.invoke(this);
          o match {
-         case node: Node => {
-           if (node.isReg || node.isClkInput) containsReg = true;
-         }
-         case buf: ArrayBuffer[_] => {
-           /* We would prefer to match for ArrayBuffer[Node] but that's
-            impossible because of JVM constraints which lead to type erasure.
-            XXX Using Seq instead of ArrayBuffer will pick up members defined
-            in Module that are solely there for implementation purposes. */
-           if(!buf.isEmpty && buf.head.isInstanceOf[Node]){
-             val nodebuf = buf.asInstanceOf[Seq[Node]];
-             for(elm <- nodebuf){
-               if (elm.isReg || elm.isClkInput) {
-                 containsReg = true;
-               }
-             }
-           }
-         }
          case bb: BlackBox => {
            bb.pathParent = this;
-           for((n, elm) <- io.flatten) {
-             if (elm.node.isClkInput) containsReg = true
-           }
          }
          case comp: Module => {
            comp.pathParent = this;
@@ -828,7 +800,7 @@ abstract class Module(var clock: Clock = null, private var _reset: Bool = null) 
     val stack = new Stack[Node]
     val sccList = new ArrayBuffer[ArrayBuffer[Node]]
 
-    GraphWalker.tarjan(nodes, {node => node.inferWidth().forward(node)})
+    GraphWalker.tarjan(nodes, {node => node.inferWidth.forward(node)})
 
     // check for combinational loops
     var containsCombPath = false

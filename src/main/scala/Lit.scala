@@ -227,6 +227,7 @@ object Literal {
     res.width = w
     res.hasInferredWidth = width == -1
     res.inputVal = x;
+    res.inferWidth = new FixedWidth(res.width)
     res
   }
 
@@ -252,6 +253,7 @@ object Literal {
     }
     res.base = base;
     if (base == 'b') {res.isZ = literal.contains('?'); res.isBinary = true;}
+    res.inferWidth = new FixedWidth(res.width)
     res
   }
 }
@@ -260,6 +262,7 @@ object Literal {
   This class should not end-up being instantiated directly in user code.
   */
 class Literal extends Node {
+
   var hasInferredWidth = false
   var isZ = false;
   var isBinary = false;
@@ -271,8 +274,6 @@ class Literal extends Node {
   override def clearlyEquals(x: Node) = x.isInstanceOf[Literal] && value == x.asInstanceOf[Literal].value
   override def toString: String = name;
   override def isInVCD: Boolean = false
-
-  override def inferWidth(): Width = new FixedWidth(width)
 
   def d (x: BigInt): Literal = Literal(x, value.toInt)
 }

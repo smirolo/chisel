@@ -31,7 +31,7 @@
 package Chisel
 
 import scala.collection.mutable.Stack
-
+import scala.collection.mutable.ArrayBuffer
 
 /** The programming model to construct a circuit is equivalent
   to a recursive descent parser from a top ``Module``.
@@ -46,9 +46,24 @@ class Scope {
     an otherwise clause. */
   val conds = new Stack[(Bool, Boolean)]();
 
+  val compStack = new Stack[Module]();
+  var stackIndent = 0;
+  val printStackStruct = new ArrayBuffer[(Int, Module)]();
+
   def genCond(): Node = conds.top._1.node;
 
   def topCond: Bool = conds.top._1
+
+  /** Returns the module currently in scope.
+
+    Backends create Node outside a scope yet we still initialize a component
+    field in ``Node`` constructor so we need to special case the empty stack
+    here.
+    */
+  def topModule(): Module = if(compStack.length > 0) compStack.top else {
+    //XXXthrow new RuntimeException("module stack is empty")
+    null
+  }
 
   /** Returns true if the condition can be used as a default value. */
   def isDefaultCond(): Boolean = {
@@ -67,8 +82,66 @@ class Scope {
 
   val clocks = new Stack[Clock]();
 
-  def clk: Clock = clocks.top
+  val resets = new Stack[Bool]();
 
-  conds.push((Bool(true), true));
-  clocks.push((new Clock).nameIt("clk"))
+  def clock: Clock = clocks.top
+
+  def reset: Bool = resets.top
+
+  /** Returns the first element that was pushed on the clocks stack.
+    */
+  def implicitClock: Clock = clocks.head
+
+  /** Returns the first element that was pushed on the resets stack.
+    */
+  def implicitReset: Bool = resets.head
+
+  def initImplicits() {
+    if( conds.isEmpty ) conds.push((Bool(true), true))
+    if( resets.isEmpty ) {
+      val reset = Bool(INPUT)
+      reset.node.isIo = true
+      reset.node.nameIt("reset")
+      resets.push(reset)
+    }
+    if( clocks.isEmpty ) {
+      clocks.push((new Clock(this.reset)).nameIt("clk"))
+    }
+  }
+
+  def push(c: Module) {
+    if( !Module.trigger ) {
+      ChiselError.error(
+        c.getClass.getName + " was not properly wrapped into a module() call.")
+    }
+    Module.trigger = false
+    compStack.push(c);
+    printStackStruct += ((stackIndent, c));
+    stackIndent += 1;
+
+    /* Initialized here because the constructor for a ``Node``
+     requires an initialized module stack. */
+    initImplicits()
+
+   /* Clock and/or reset were not specified so we use
+     the one currently in scope.
+    This code needs to be executed after the implicit
+    clock and reset were initialized of course. */
+    if( c.clock == null ) c.clock = this.clock
+    if( c._reset == null ) c._reset = this.reset
+  }
+
+  def pop() {
+    val c = compStack.pop;
+    if( !compStack.isEmpty ) {
+      val dad = compStack.top;
+      c.parent = dad;
+      dad.children += c;
+    }
+    stackIndent -= 1;
+    c.level = 0;
+    for(child <- c.children) {
+      c.level = math.max(c.level, child.level + 1);
+    }
+  }
 }

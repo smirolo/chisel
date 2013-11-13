@@ -296,21 +296,18 @@ abstract class Backend {
       inputs belong to the outside component. Otherwise, its inputs are the same
       as node's inputs.
       */
-      val curComp = 
-        if ( node.isIo && node.asInstanceOf[IOBound].dir == INPUT ) {
-          node.component.parent
-        } else {
-          node.component
-        }
+      val curComp = node.component
       if (!node.component.nodes.contains(node))
         node.component.nodes += node
       for (input <- node.inputs) {
-        if(!walked.contains(input)) {
-          if( input.component == null ) {
-            input.component = curComp
+        if( input != null ) {
+          if(!walked.contains(input)) {
+            if( input.component == null ) {
+              input.component = curComp
+            }
+            walked += input
+            dfsStack.push(input)
           }
-          walked += input
-          dfsStack.push(input)
         }
       }
     }
@@ -418,9 +415,6 @@ abstract class Backend {
   def gatherClocksAndResets {
     for (parent <- Module.sortedComps) {
       for (child <- parent.children) {
-        for (clock <- child.clocks) {
-          parent.addClock(clock)
-        }
         for (reset <- child.resets.keys) {
           // create a reset pin in parent if reset does not originate in parent and 
           // if reset is not an output from one of parent's children
@@ -428,7 +422,7 @@ abstract class Backend {
             parent.addResetPin(Bool(reset))
 
           // special case for implicit reset
-          if (reset == Module.implicitReset && parent == Module.topComponent)
+          if (reset == Module.scope.implicitReset && parent == Module.topComponent)
             if (!parent.resets.contains(reset))
               parent.resets += (reset -> reset)
         }
@@ -460,6 +454,7 @@ abstract class Backend {
   }
 
   // walk forward from root register assigning consumer clk = root.clock
+/* XXX to re-implement
   def createClkDomain(root: Node, walked: ArrayBuffer[Node]) = {
     val dfsStack = new Stack[Node]
     walked += root; dfsStack.push(root)
@@ -481,6 +476,7 @@ abstract class Backend {
       }
     }
   }
+ */
 
   def elaborate(c: Module): Unit = {
     Module.setAsTopComponent(c)
@@ -510,13 +506,13 @@ abstract class Backend {
 
     assignClockAndResetToModules
     Module.sortedComps.map(_.addDefaultReset)
-    c.addClockAndReset
+//XXX    c.addClockAndReset
     gatherClocksAndResets
     connectResets
 
     ChiselError.info("started width inference")
     val accessibleNodes = new ArrayBuffer[Node]
-    GraphWalker.tarjan(c.outputs(), {node => node.inferWidth().forward(node)})
+    GraphWalker.tarjan(c.outputs(), {node => node.inferWidth.forward(node)})
     ChiselError.info("finished width inference")
     ChiselError.info("start width checking")
     c.forceMatchingWidths;
@@ -545,11 +541,13 @@ abstract class Backend {
     ChiselError.info("finished transforms")
 
     Module.sortedComps.map(_.nodes.map(_.addConsumers))
+/* XXX re-implement clockdomains.
     val clkDomainWalkedNodes = new ArrayBuffer[Node]
     for (comp <- Module.sortedComps)
       for (node <- comp.nodes)
         if (node.isInstanceOf[RegDelay])
             createClkDomain(node, clkDomainWalkedNodes)
+ */
     ChiselError.checkpoint()
 
     /* We execute nameAll after traceNodes because bindings would not have been
@@ -604,7 +602,7 @@ abstract class Backend {
   /** Prints the call stack of Component as seen by the push/pop runtime. */
   protected def printStack {
     var res = ""
-    for((i, c) <- Module.printStackStruct){
+    for((i, c) <- Module.scope.printStackStruct){
       res += (genIndent(i) + c.moduleName + " " + c.name + "\n")
     }
     ChiselError.info(res)

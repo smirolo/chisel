@@ -39,13 +39,12 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
   a LFSR, which returns "1" on its first invocation).
   */
 object Mem {
-  def apply[T <: Data](out: T, n: Int, seqRead: Boolean = false,
-    clock: Clock = null): Mem[T] = {
+  def apply[T <: Data](out: T, depth: Int, seqRead: Boolean = false,
+    clock: Clock = Module.scope.clock, reset: Bool = Module.scope.reset): Mem[T] = {
 
     val gen = out.clone
     Reg.validateGen(gen)
-    val res = new Mem(() => gen, n, seqRead)
-    if (!(clock == null)) res.node.clock = clock
+    val res = new Mem(() => gen, clock, reset, depth, seqRead)
     res
   }
 
@@ -75,11 +74,13 @@ abstract class AccessTracker extends nameable {
   port is writing to in the same cycle, the read data is random garbage (from
   a LFSR, which returns "1" on its first invocation).
   */
-class Mem[T <: Data](gen: () => T, val n: Int,
+class Mem[T <: Data](gen: () => T, clock: Clock, reset: Bool, val depth: Int,
   val seqRead: Boolean, isInline: Boolean = Module.isInlineMem)
     extends AccessTracker {
 
-  val node = new MemDelay(n, isInline)
+  val node = new MemDelay(clock.node.asInstanceOf[Update], reset.node, depth, isInline)
+
+  def isInVCD = false
 
   def writeAccesses: ArrayBuffer[MemWrite] =
     (writes ++ readwrites.map(_.write))
@@ -122,10 +123,10 @@ class Mem[T <: Data](gen: () => T, val n: Int,
     /** XXX Cannot specify return type as it can either be proc or MemWrite
       depending on the execution path you believe. */
     val cond = // add bounds check if depth is not a power of 2
-      if (isPow2(this.n)) {
+      if (isPow2(this.depth)) {
         condIn
       } else {
-        condIn && addr(log2Up(this.n)-1,0) < UInt(this.n)
+        condIn && addr(log2Up(this.depth)-1,0) < UInt(this.depth)
       }
     val wmask = // remove constant-1 write masks
       if (!(wmaskIn == null)

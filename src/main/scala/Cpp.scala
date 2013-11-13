@@ -76,9 +76,6 @@ class CppBackend extends Backend {
       case x: IOBound =>
         emitRef(x.inputs(0))
 
-      case x: Bits =>
-        if (!node.isInObject && node.inputs.length == 1) emitRef(node.inputs(0)) else super.emitRef(node)
-
       case _ =>
         super.emitRef(node)
     }
@@ -116,7 +113,7 @@ class CppBackend extends Backend {
         "  dat_t<" + node.width + "> " + emitRef(node) + "_shadow;\n";
       case m: MemDelay =>
         "  mem_t<" + m.width + "," + m.depth + "> " + emitRef(m) + ";\n"
-      case c: Clock =>
+      case c: Update =>
         "  int " + emitRef(node) + ";\n" +
         "  int " + emitRef(node) + "_cnt;\n";
       // case f: AsyncFIFO =>
@@ -174,7 +171,7 @@ class CppBackend extends Backend {
   def emitOrderOpDef(o: Op): String = {
     val initial = (a: String, b: String) => a + o.name + b
     val subsequent = (i: String, a: String, b: String) => ("(" + i + ") & "
-      + a + " == " + b + " || " + a + o.opSlug(0) + b)
+      + a + " == " + b + " || " + a + o.slug(0) + b)
     val cond = opFoldLeft(o, initial, subsequent)
     "  " + emitLoWordRef(o) + " = " + opFoldLeft(o, initial, subsequent) + ";\n"
   }
@@ -584,19 +581,8 @@ class CppBackend extends Backend {
         }
       }
 
-      case x: Clock =>
+      case x: Update =>
         ""
-
-      case x: Bits =>
-        if (x.isInObject && x.inputs.length == 1) {
-          emitTmpDec(x) + block((0 until words(x)).map(i => emitWordRef(x, i)
-            + " = " + emitWordRef(x.inputs(0), i)))
-        } else if (x.inputs.length == 0 && !x.isInObject) {
-          emitTmpDec(x) + block((0 until words(x)).map(i => emitWordRef(x, i)
-            + " = rand_val()")) + trunc(x)
-        } else {
-          ""
-        }
 
       case m: MemRead =>
         emitTmpDec(m) + block((0 until words(m)).map(i => emitWordRef(m, i)
@@ -628,8 +614,16 @@ class CppBackend extends Backend {
           + ");\n"
           + "#endif\n")
 
-      case _ =>
-        ""
+      case x: Node =>
+        if (x.isInObject && x.inputs.length == 1) {
+          emitTmpDec(x) + block((0 until words(x)).map(i => emitWordRef(x, i)
+            + " = " + emitWordRef(x.inputs(0), i)))
+        } else if (x.inputs.length == 0 && !x.isInObject) {
+          emitTmpDec(x) + block((0 until words(x)).map(i => emitWordRef(x, i)
+            + " = rand_val()")) + trunc(x)
+        } else {
+          ""
+        }
     }
   }
 
@@ -643,22 +637,23 @@ class CppBackend extends Backend {
 
   def emitInit(node: Node): String = {
     node match {
-      case x: Clock =>
-        if (x.srcClock != null) {
-          "  " + emitRef(node) + " = " + emitRef(x.srcClock) + x.initStr +
-          "  " + emitRef(node) + "_cnt = " + emitRef(node) + ";\n"
+      case x: Update =>
+        if (x.src != null) {
+          ("  " + emitRef(node) + " = " + emitRef(x.src)
+            + " * " + x.mul + " / " + x.div + ";\n"
+            + "  " + emitRef(node) + "_cnt = " + emitRef(node) + ";\n")
         } else
           ""
       case x: RegDelay =>
         "  if (rand_init) " + emitRef(node) + ".randomize();\n"
 
-      case x: MemDelay =>
-        "  if (rand_init) " + emitRef(node) + ".randomize();\n"
-
-      case r: ROM[_] =>
-        r.lits.zipWithIndex.map { case (lit, i) =>
+      case r: ROMemDelay =>
+        r.inputs.zipWithIndex.map { case (lit, i) =>
           block((0 until words(r)).map(j => emitRef(r) + ".put(" + i + ", " + j + ", " + emitWordRef(lit, j) + ")"))
         }.reduceLeft(_ + _)
+
+      case x: MemDelay =>
+        "  if (rand_init) " + emitRef(node) + ".randomize();\n"
 
       case u: Node =>
         if (u.driveRand && u.isInObject)
@@ -687,8 +682,8 @@ class CppBackend extends Backend {
     }
   }
 
-  def clkName (clock: Clock): String =
-    (if (clock == Module.implicitClock) "" else "_" + emitRef(clock))
+  def clkName (clock: Update): String =
+    (if (clock == Module.scope.implicitClock) "" else "_" + emitRef(clock))
 
   def genHarness(c: Module, name: String) {
     val harness  = createOutputFile(name + "-emulator.cpp");
@@ -697,13 +692,12 @@ class CppBackend extends Backend {
     harness.write("  " + name + "_t* c = new " + name + "_t();\n");
     harness.write("  int lim = (argc > 1) ? atoi(argv[1]) : -1;\n");
     harness.write("  int period;\n")
-    if (Module.clocks.length > 1) {
-      for (clock <- Module.clocks) {
-        if (clock.srcClock == null) {
-          harness.write("  period = atoi(read_tok(stdin).c_str());\n")
-          harness.write("  c->" + emitRef(clock) + " = period;\n")
-          harness.write("  c->" + emitRef(clock) + "_cnt = period;\n")
-        }
+    val clocks = c.clocks(tree=true)
+    for (clock <- clocks) {
+      if (clock.src == null) {
+        harness.write("  period = atoi(read_tok(stdin).c_str());\n")
+        harness.write("  c->" + emitRef(clock) + " = period;\n")
+        harness.write("  c->" + emitRef(clock) + "_cnt = period;\n")
       }
     }
     harness.write("  c->init();\n");
@@ -713,7 +707,7 @@ class CppBackend extends Backend {
     harness.write("  int delta = 0;\n")
     harness.write("  for(int i = 0; i < 5; i++) {\n")
     harness.write("    dat_t<1> reset = LIT<1>(1);\n")
-    if (Module.clocks.length > 1) {
+    if (clocks.length > 1) {
       harness.write("    delta += c->clock(reset);\n")
     } else {
       harness.write("    c->clock_lo(reset);\n")
@@ -724,7 +718,7 @@ class CppBackend extends Backend {
     harness.write("    dat_t<1> reset = LIT<1>(0);\n");
     harness.write("    if (!c->scan(stdin)) break;\n");
     // XXX Why print is after clock_lo and dump after clock_hi?
-    if (Module.clocks.length > 1) {
+    if (clocks.length > 1) {
       harness.write("    delta += c->clock(reset);\n")
       harness.write("    fprintf(stdout, \"%d\", delta);\n")
       harness.write("    fprintf(stdout, \"%s\", \" \");\n")
@@ -839,8 +833,9 @@ class CppBackend extends Backend {
       ChiselError.info("NUM " + numNodes + " MAX-WIDTH " + maxWidth + " MAX-DEPTH " + maxDepth);
     }
 
-    val clkDomains = new HashMap[Clock, (StringBuilder, StringBuilder)]
-    for (clock <- Module.clocks) {
+    val clkDomains = new HashMap[Update, (StringBuilder, StringBuilder)]
+    val clocks = c.clocks(tree=true)
+    for (clock <- clocks) {
       val clock_lo = new StringBuilder
       val clock_hi = new StringBuilder
       clkDomains += (clock -> ((clock_lo, clock_hi)))
@@ -876,12 +871,12 @@ class CppBackend extends Backend {
         }
       }
     }
-    for (clock <- Module.clocks)
+    for (clock <- clocks)
       out_h.write(emitDec(clock))
 
     out_h.write("\n");
     out_h.write("  void init ( bool rand_init = false );\n");
-    for ( clock <- Module.clocks) {
+    for ( clock <- clocks) {
       out_h.write("  void clock_lo" + clkName(clock) + " ( dat_t<1> reset );\n")
       out_h.write("  void clock_hi" + clkName(clock) + " ( dat_t<1> reset );\n")
     }
@@ -900,25 +895,21 @@ class CppBackend extends Backend {
     for (m <- c.omods) {
       out_c.write(emitInit(m));
     }
-    for (clock <- Module.clocks)
+    for (clock <- clocks)
       out_c.write(emitInit(clock))
     out_c.write("}\n");
 
+/* XXX fix: re-implement
     for (m <- c.omods) {
-      val clock = if (m.clock == null) Module.implicitClock else m.clock
-      clkDomains(clock)._1.append(emitDefLo(m))
+      clkDomains(m.clock)._1.append(emitDefLo(m))
     }
-
     for (m <- c.omods) {
-      val clock = if (m.clock == null) Module.implicitClock else m.clock
-      clkDomains(clock)._2.append(emitInitHi(m))
+      clkDomains(m.clock)._2.append(emitInitHi(m))
     }
-
     for (m <- c.omods) {
-      val clock = if (m.clock == null) Module.implicitClock else m.clock
-      clkDomains(clock)._2.append(emitDefHi(m))
+      clkDomains(m.clock)._2.append(emitDefHi(m))
     }
-
+ */
     for (clk <- clkDomains.keys) {
       clkDomains(clk)._1.append("}\n")
       clkDomains(clk)._2.append("}\n")
@@ -928,19 +919,19 @@ class CppBackend extends Backend {
 
     out_c.write("int " + c.name + "_t::clock ( dat_t<1> reset ) {\n")
     out_c.write("  uint32_t min = ((uint32_t)1<<31)-1;\n")
-    for (clock <- Module.clocks) {
+    for (clock <- clocks) {
       out_c.write("  if (" + emitRef(clock) + "_cnt < min) min = " + emitRef(clock) +"_cnt;\n")
     }
-    for (clock <- Module.clocks) {
+    for (clock <- clocks) {
       out_c.write("  " + emitRef(clock) + "_cnt-=min;\n")
     }
-    for (clock <- Module.clocks) {
+    for (clock <- clocks) {
       out_c.write("  if (" + emitRef(clock) + "_cnt == 0) clock_lo" + clkName(clock) + "( reset );\n")
     }
-    for (clock <- Module.clocks) {
+    for (clock <- clocks) {
       out_c.write("  if (" + emitRef(clock) + "_cnt == 0) clock_hi" + clkName(clock) + "( reset );\n")
     }
-    for (clock <- Module.clocks) {
+    for (clock <- clocks) {
       out_c.write("  if (" + emitRef(clock) + "_cnt == 0) " + emitRef(clock) + "_cnt = " + 
                   emitRef(clock) + ";\n")
     }

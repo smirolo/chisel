@@ -59,9 +59,6 @@ class FloBackend extends Backend {
         case x: IOBound =>
           emitRef(x.inputs(0))
 
-        case x: Bits =>
-          if (!node.isInObject && node.inputs.length == 1) emitRef(node.inputs(0)) else super.emitRef(node)
-
         case _ =>
           super.emitRef(node)
       }
@@ -78,7 +75,7 @@ class FloBackend extends Backend {
       case x: FillOp =>
         emitDec(x) + "fill/" + node.width + " " + emitRef(node.inputs(0)) + "\n"
 
-      case x: Bits =>
+      case x: IOBound =>
         if( x.inputs.length == 1 ) {
           emitDec(x) + "mov " + emitRef(x.inputs(0)) + "\n"
         } else {
@@ -104,10 +101,10 @@ class FloBackend extends Backend {
         emitDec(x) + "log2/" + x.width + " " + emitRef(x.inputs(0)) + "\n"
 
       case x: UnaryOp =>
-        emitDec(x) + x.opSlug + emitRef(node.inputs(0)) + "\n"
+        emitDec(x) + x.slug + emitRef(node.inputs(0)) + "\n"
 
       case x: BinaryOp =>
-          (emitDec(x) + x.opSlug + "/" + x.width
+          (emitDec(x) + x.slug + "/" + x.width
             + " " + emitRef(x.left) + " " + emitRef(x.right)) + "\n"
 
       case _ =>

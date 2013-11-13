@@ -50,9 +50,9 @@ object Lookup {
 class Lookup(addrN: Node, default: Node,
     val map: Seq[(Node, Node)]) extends Node {
 
-  def inferWidth(): Width = new WidthOf(0)
+  inferWidth = new WidthOf(0)
 
-  inputs.append(addr)
+  inputs.append(addrN)
   inputs.append(default)
   map.map(x => { inputs.append(x._1); inputs.append(x._2) })
 

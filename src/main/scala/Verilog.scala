@@ -106,8 +106,10 @@ class VerilogBackend extends Backend {
   }
 
   /** Emit a width suffix */
-  def emitWidth(node: Node): String =
-    if (node.width == 1) "" else "[" + (node.width-1) + ":0]"
+  def emitWidth(node: Node): String = {
+
+    if (node.width == 1) "" else "[" + (node.width-1) + ":0] "
+  }
 
   override def emitTmp(node: Node): String =
     emitRef(node)
@@ -165,6 +167,9 @@ class VerilogBackend extends Backend {
         val mask = ("M", if (w.isMasked) emitRef(w.mask) else null)
         val out = ("O", emitTmp(r))
         str("RW", addr, en, write, data, mask, out)
+
+      case _ =>
+        ""
     }
   }
 
@@ -381,36 +386,39 @@ class VerilogBackend extends Backend {
           + "$signed(" + emitRef(x.left) + ") "
           + ">>>" + " " + emitRef(x.right) + ";\n")
 
-      case m: MemDelay =>
-        if(m.isInline) {
-          ""
-        } else {
-          val configStr =
-          (" depth " + m.depth +
-            " width " + m.width +
-            " ports " + m.ports.map(_.getPortType).reduceLeft(_ + "," + _) +
-            "\n")
-          val name = getMemName(m, configStr)
-          ChiselError.info("MEM " + name)
-
-          val clkrst = Array("    .CLK(clk)", "    .RST(" + emitRef(m.inputs.last) + ")")
-          val portdefs = for (i <- 0 until m.ports.size)
-          yield emitPortDef(m.ports(i), i)
-          "  " + name + " " + emitRef(m) + " (\n" +
-            (clkrst ++ portdefs).reduceLeft(_ + ",\n" + _) + "\n" +
-          "  );\n"
-        }
-
-      case r: ROM[_] => {
+      case r: ROMemDelay => {
         val inits = new StringBuilder
-        for (i <- 0 until r.lits.length)
+        for (i <- 0 until r.inputs.length)
           inits append("    " + emitRef(r) + "[" + i + "] = "
-            + emitRef(r.lits(i)) + ";\n")
+            + emitRef(r.inputs(i)) + ";\n")
 
         "  always @(*) begin\n" +
         inits +
         "  end\n"
       }
+
+      case m: MemDelay =>
+        if(m.isInline) {
+          ""
+        } else {
+          if( m.ports.length > 0 ) {
+            val configStr =
+              (" depth " + m.depth +
+                " width " + m.width +
+                " ports " + m.ports.map(_.getPortType).reduceLeft(_ + "," + _) +
+                "\n")
+            val name = getMemName(m, configStr)
+            ChiselError.info("MEM " + name)
+            val clkrst = Array("    .CLK(" + m.clock + ")", "    .RST(" + emitRef(m.reset) + ")")
+            val portdefs = for (i <- 0 until m.ports.size)
+            yield emitPortDef(m.ports(i), i)
+            "  " + name + " " + emitRef(m) + " (\n" +
+              (clkrst ++ portdefs).reduceLeft(_ + ",\n" + _) + "\n" +
+            "  );\n"
+          } else {
+            ChiselError.error("Memory " + m.name + " has no ports")
+          }
+        }
 
       case m: MemRead =>
         if (m.mem.isInline) {
@@ -433,7 +441,7 @@ class VerilogBackend extends Backend {
 
       case x: UnaryOp =>
         ("  assign " + emitTmp(x) + " = "
-          + x.opSlug + " " + emitRef(x.inputs(0)) + ";\n")
+          + x.opPrefix + " " + emitRef(x.inputs(0)) + ";\n")
 
       case _ =>
         ""
@@ -443,40 +451,37 @@ class VerilogBackend extends Backend {
 
   def emitSigned(n: Node): String = if(n.isSigned) " signed " else ""
 
-  def emitDecBase(node: Node): String =
-    "  wire" + emitSigned(node) + emitWidth(node) + " " + emitRef(node) + ";\n"
+  def emitDecBase(node: Node): String = {
+    "  wire " + emitSigned(node) + emitWidth(node) + emitRef(node) + ";\n"
+  }
 
   override def emitDec(node: Node): String = {
     val res =
     node match {
       case x: ListLookupRef =>
-        "  reg" + emitSigned(x) + emitWidth(x) + emitRef(x) + ";\n";
+        "  reg " + emitSigned(x) + emitWidth(x) + emitRef(x) + ";\n";
 
       case x: Lookup =>
-        "  reg" + emitSigned(x) + emitWidth(x) + emitRef(x) + ";\n";
+        "  reg " + emitSigned(x) + emitWidth(x) + emitRef(x) + ";\n";
 
       case x: Sprintf =>
-        "  reg" + emitSigned(x) + emitWidth(x) + emitRef(x) + ";\n";
+        "  reg " + emitSigned(x) + emitWidth(x) + emitRef(x) + ";\n";
 
       case x: Literal =>
         ""
 
       case x: RegDelay =>
-          "  reg" + emitSigned(x) + emitWidth(x) + emitRef(x) + (
+          "  reg " + emitSigned(x) + emitWidth(x) + emitRef(x) + (
             if( x.depth > 1) " [" + (x.depth-1) + ":0]" else "") + ";\n"
 
       case m: MemDelay =>
         if (m.isInline) {
-          "  reg " + emitWidth(m) + emitRef(m) + " [" + (m.depth-1) + ":0];\n"
+          "  reg " + emitWidth(m) + emitRef(m) + " [" + (m.depth - 1) + ":0];\n"
         } else {
           ""
         }
 
-      case r: ROM[_] =>
-        "  reg " + emitWidth(r) + emitRef(r) + " [" + (r.lits.length-1) + ":0];\n"
-
       case x: MemAccess =>
-        x.referenced = true
         emitDecBase(node)
 
       case x: IOBound =>
@@ -580,15 +585,15 @@ class VerilogBackend extends Backend {
 
   def emitRegs(c: Module): StringBuilder = {
     val res = new StringBuilder();
-    val clkDomains = new HashMap[Clock, StringBuilder]
+    val clkDomains = new HashMap[Update, StringBuilder]
     for (clock <- c.clocks) {
       val sb = new StringBuilder
       sb.append("  always @(posedge " + emitRef(clock) + ") begin\n")
       clkDomains += (clock -> sb)
     }
     for (m <- c.mods) {
-      if (m.clock != null)
-        clkDomains(m.clock).append(emitReg(m))
+      if( m.isInstanceOf[Delay] && m.asInstanceOf[Delay].clock != null )
+        clkDomains(m.asInstanceOf[Delay].clock).append(emitReg(m))
     }
     for (clock <- c.clocks) {
       clkDomains(clock).append("  end\n")
@@ -600,22 +605,23 @@ class VerilogBackend extends Backend {
   def emitReg(node: Node): String = {
     node match {
       case reg: RegDelay =>
-        if(reg.isEnable && (reg.enableSignal.isInstanceOf[Literal] || reg.enableSignal.asInstanceOf[Literal].value != 1)){
+        val enable = reg.enable
+        if( enable != null ){
           if(reg.isReset){
-            "    if(" + emitRef(reg.inputs.last) + ") begin\n" +
+            "    if(" + emitRef(reg.reset) + ") begin\n" +
             "      " + emitRef(reg) + " <= " + emitRef(reg.init) + ";\n" +
-            "    end else if(" + emitRef(reg.enableSignal) + ") begin\n" +
+            "    end else if(" + emitRef(enable) + ") begin\n" +
             "      " + emitRef(reg) + " <= " + emitRef(reg.next) + ";\n" +
             "    end\n"
           } else {
-            "    if(" + emitRef(reg.enableSignal) + ") begin\n" +
+            "    if(" + emitRef(enable) + ") begin\n" +
             "      " + emitRef(reg) + " <= " + emitRef(reg.next) + ";\n" +
             "    end\n"
           }
         } else {
           "    " + emitRef(reg) + " <= " +
           (if (reg.isReset) {
-            emitRef(reg.inputs.last) + " ? " + emitRef(reg.init) + " : "
+            emitRef(reg.reset) + " ? " + emitRef(reg.init) + " : "
           } else {
             ""
           }) + emitRef(reg.next) + ";\n"

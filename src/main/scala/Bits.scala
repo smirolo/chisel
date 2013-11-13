@@ -79,6 +79,8 @@ abstract class Bits extends Data {
     this
   }
 
+  override def nodes(): Seq[Node] = node :: Nil
+
   override def flatten: Array[(String, Bits)] = Array((name, this));
 
   override def flip(): this.type = {
@@ -95,7 +97,7 @@ abstract class Bits extends Data {
     and returns the width of this node.
   */
   def getWidth(): Int = {
-    GraphWalker.tarjan(node :: Nil, {node => node.inferWidth().forward(node)})
+    GraphWalker.tarjan(node :: Nil, {node => node.inferWidth.forward(node)})
     node.width
   }
 
@@ -106,8 +108,9 @@ abstract class Bits extends Data {
     node != null && node.isInstanceOf[Literal]
   }
 
-  override def nameIt(name: String) = {
+  override def nameIt(name: String): this.type = {
     if( node != null ) node.name = name
+    this
   }
 
   /* Assignment to this */
@@ -131,14 +134,15 @@ abstract class Bits extends Data {
         }
       }
     } else {
-      val result = new MuxOp(Module.scope.genCond(), src.lvalue(),
+      result = new MuxOp(Module.scope.genCond(), src.lvalue(),
         if( node != null ) node.lvalue() else null)
-      if( node == null ) {
+      if( node == null || !node.assigned ) {
         /* First assignment we construct a mux tree with a dangling
          default position. */
         default = result
       }
     }
+    println("XXX [procAssign] node=" + node + ", result=" + result)
     if( node != null ) {
       node.rvalue(result)
     } else {
@@ -195,6 +199,7 @@ abstract class Bits extends Data {
               leftBond.bind(rightBond)
             }
           }
+          case _ => ChiselError.error("<> matching against " + right.node.getClass.getName)
         }
     }
   }

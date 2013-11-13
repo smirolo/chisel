@@ -57,7 +57,7 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
 
   def setClocks(clocks: HashMap[Clock, Int]) {
     println("SETTING UP CLOCKS")
-    for (clock <- Module.clocks) {
+    for (clock <- Module.scope.clocks) {
       if (clock.srcClock == null) {
         val s = BigInt(clocks(clock)).toString(16)
         for (c <- s)
@@ -93,7 +93,7 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
     var c = testIn.read
     val sb = new StringBuilder()
     def isSpace(c: Int) : Boolean = c == 0x20 || c == 0x9 || c == 0xD || c == 0xA
-    if (Module.clocks.length > 1) {
+    if (Module.scope.clocks.length > 1) {
       while (isSpace(c)) c = testIn.read
       while (!isSpace(c)) {
         sb += c.toChar

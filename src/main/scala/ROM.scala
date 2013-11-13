@@ -37,25 +37,22 @@ import scala.collection.mutable.Stack
 object ROM {
   def apply[T <: Data](lits: Seq[T]): ROM[T] = {
     new ROM[T](() => lits.head,
-      lits.map(x => x.toBits.node.asInstanceOf[Literal]))
+      lits.map(x => x.toBits.node.asInstanceOf[Literal]),
+      Module.scope.clock,
+      Module.scope.reset)
   }
 }
 
 
-class ROM[T <: Data](gen: () => T, val lits: Seq[Literal])
-    extends Mem[T](gen, lits.length, false, true) {
+class ROM[T <: Data](gen: () => T, val lits: Seq[Literal],
+  clock: Clock, reset: Bool,
+  isInline: Boolean = Module.isInlineMem) extends Mem[T](
+  gen, clock, reset, lits.length, false, isInline) {
+
+  override val node = new ROMemDelay(lits, clock.node.asInstanceOf[Update],
+    reset.node, lits.length, isInline)
 
   override def write(addr: UInt, data: T) {
     ChiselError.error("Can't write to ROM")
   }
-
-  override def equals(x: Any): Boolean = {
-    if (x.isInstanceOf[ROM[_]]) {
-      this.eq(x.asInstanceOf[AnyRef])
-    } else {
-      super.equals(x)
-    }
-  }
-
-  def isInVCD = false
 }

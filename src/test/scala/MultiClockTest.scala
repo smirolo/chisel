@@ -69,7 +69,7 @@ class MultiClockSuite extends AssertionsForJUnit {
         val ready = Bool(INPUT)
         val valid = Bool(OUTPUT)
       }
-      val stored = Reg(next=io.ready, clock=new Clock())
+      val stored = Reg(next=io.ready, clock=Clock())
       io.valid := stored
     }
 

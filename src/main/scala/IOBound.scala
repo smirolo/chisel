@@ -44,7 +44,7 @@ object NODIRECTION extends IODirection {
   override def toString: String = "NODIRECTION"
 }
 
-
+/* XXX
 // used for component to component connections
 object Binding {
 
@@ -70,6 +70,7 @@ object Binding {
     }
   }
 }
+ */
 
 /** Pass through binding
 
@@ -79,6 +80,7 @@ class IOBound(var dir: IODirection = NODIRECTION,
               widthP: Int = -1,
               opandNode: Node = null) extends Node {
 
+  inferWidth = if( widthP > 0 ) new FixedWidth(widthP) else new WidthOf(0)
   if( opandNode != null ) this.inputs.append(opandNode)
   width = widthP
 
@@ -128,14 +130,5 @@ class IOBound(var dir: IODirection = NODIRECTION,
 
   def target: Node = inputs(0)
 
-  def inferWidth(): Width = new WidthOf(0)
-
-  override def toString: String = {
-/* XXX
-(if (dir == INPUT) "INPUT, "
-        else if (dir == OUTPUT) "OUTPUT, " else "")
- */
-    "IOBound(" + dir.toString + "," + width + (
-      if( inputs.length > 0 ) ("," + target) else "") + ")"
-  }
+  override def slug: String = dir.toString + "[" + width + "]"
 }
