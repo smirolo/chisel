@@ -40,7 +40,7 @@ object Cat {
           | right.node.asInstanceOf[Literal].value,
           left.node.width + right.node.width)
       } else {
-        new CatOp(left.node.lvalue(), right.node.lvalue())
+        new CatOp(left.lvalue(), right.lvalue())
       })
   }
 

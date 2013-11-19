@@ -50,7 +50,7 @@ object Bool {
 class Bool extends UInt {
 
   def :=(src: Bool): Unit = {
-    this procAssign src.node
+    this procAssign src
   }
 
   def && (right: Bool): Bool = LogicalAnd(this, right)
@@ -68,18 +68,18 @@ object LogicalAnd {
     val op = {
       if (left.isConst) {
         if( left.node.asInstanceOf[Literal].value > 0 ) {
-          right.node.lvalue()
+          right.lvalue()
         } else {
           left.node // alias to false
         }
       } else if( right.isConst ) {
         if( right.node.asInstanceOf[Literal].value > 0 ) {
-          left.node.lvalue()
+          left.lvalue()
         } else {
           right.node // alias to true
         }
       } else {
-        new LogicalAndOp(left.node.lvalue(), right.node.lvalue())
+        new LogicalAndOp(left.lvalue(), right.lvalue())
       }
     }
     val result = Bool(op)
@@ -97,16 +97,16 @@ object LogicalOr {
         if( left.node.asInstanceOf[Literal].value > 0 ) {
           left.node // alias to true
         } else {
-          right.node.lvalue()
+          right.lvalue()
         }
       } else if( right.isConst ) {
         if( right.node.asInstanceOf[Literal].value > 0 ) {
           right.node // alias to true
         } else {
-          left.node.lvalue()
+          left.lvalue()
         }
       } else {
-        new LogicalOrOp(left.node.lvalue(), right.node.lvalue())
+        new LogicalOrOp(left.lvalue(), right.lvalue())
       })
   }
 }

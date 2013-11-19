@@ -74,6 +74,8 @@ class NameSuite extends AssertionsForJUnit {
   /** Checks names are correctly generated in the presence
    of ListLookups. */
   @Test def testListLookups() {
+    println("\nRunning testListLookups:")
+
     trait Constants {
       val VXCPTHOLD  = UInt("b00000_00000_00000_0001001110_1111011", 32)
       val VCMD_X = UInt(0, 3)
@@ -128,6 +130,8 @@ endmodule
   /** This test checks names are correctly generated in the presence
    of Binding. */
   @Test def testBindFirst() {
+    println("\nRunning testBindFirst:")
+
     class BlockIO extends Bundle {
       val valid = Bool(INPUT)
       val replay = Bool(OUTPUT)
@@ -168,7 +172,7 @@ endmodule
       () => Module(new BindFirstComp()))
    assertFile(tmpdir.getRoot() + "/NameSuite_BindFirstComp_1.v",
 """module NameSuite_BlockDecoder_1(
-    input  io_valid,
+    input io_valid,
     output io_replay,
     output io_sigs_enq_cmdq,
     output io_sigs_enq_ximm1q
@@ -179,26 +183,26 @@ endmodule
 endmodule
 
 module NameSuite_BindFirstComp_1(
-    input  valid_common,
+    input valid_common,
     output io_replay
 );
 
   wire T0;
   wire T1;
   wire T2;
-  wire mask_ximm1q_ready;
-  wire dec_io_sigs_enq_ximm1q;
-  wire T3;
   wire mask_cmdq_ready;
   wire dec_io_sigs_enq_cmdq;
+  wire T3;
+  wire mask_ximm1q_ready;
+  wire dec_io_sigs_enq_ximm1q;
 
   assign io_replay = T0;
   assign T0 = valid_common && T1;
-  assign T1 = T3 || T2;
-  assign T2 = ! mask_ximm1q_ready;
-  assign mask_ximm1q_ready = ! dec_io_sigs_enq_ximm1q;
-  assign T3 = ! mask_cmdq_ready;
+  assign T1 = T2 || T3;
+  assign T2 = ! mask_cmdq_ready;
   assign mask_cmdq_ready = ! dec_io_sigs_enq_cmdq;
+  assign T3 = ! mask_ximm1q_ready;
+  assign mask_ximm1q_ready = ! dec_io_sigs_enq_ximm1q;
   NameSuite_BlockDecoder_1 dec(
        //.io_valid(  )
        //.io_replay(  )
@@ -225,6 +229,8 @@ endmodule
     We thus generate a name for the component instance based on its class name.
     */
   @Test def testBindSecond() {
+    println("\nRunning testBindSecond:")
+
     class Block extends Module {
       val io = new Bundle() {
         val irq = Bool(INPUT)
@@ -286,6 +292,8 @@ endmodule
     instead of using a derived name derived from CompIO.
     */
   @Test def testBindThird() {
+    println("\nRunning testBindThird:")
+
     class BankToBankIO extends Bundle {
       val ren    = Bool(INPUT)
     }
@@ -323,8 +331,8 @@ endmodule
       io.result := conn(0).ren | conn(1).ren | conn(2).ren | conn(3).ren
     }
 
-    chiselMain(Array[String]("--v",
-      "--targetDir", tmpdir.getRoot().toString()),
+    chiselMain(Array[String]("--v"),
+//      "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new BindThirdComp()))
     assertFile(tmpdir.getRoot() + "/NameSuite_BindThirdComp_1.v",
 """module NameSuite_Comp_1(
@@ -380,6 +388,8 @@ endmodule
     of the module.
     */
   @Test def testBindFourth() {
+    println("\nRunning testBindFourth:")
+
     class CompIO extends Bundle {
       val in = UInt(INPUT, 5)
       val out = UInt(OUTPUT, 5)

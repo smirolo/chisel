@@ -70,21 +70,21 @@ class NoCircleGraphVisitor extends GraphVisitor {
 
 object GraphWalker {
 
-  def except[T <: Node](node: Node)(implicit m: Manifest[T]): Boolean = {
-    node != null && !m.erasure.isInstance(node)
+  def exceptEdge[T <: Node, U <: Node](source: Node, target: Node)(implicit m1: Manifest[T], m2: Manifest[U]): Boolean = {
+    !m1.erasure.isInstance(source) || (target != null && !m2.erasure.isInstance(target))
   }
 
-  def anyNode(node: Node): Boolean = {
+  def anyEdge(source: Node, target: Node): Boolean = {
     /* Assignments are using Muxes with dangling pointers
      to construct a tree rooted with a default value. */
-    node != null
+    target != null
   }
 
   /** Breath first traversal from a set of *roots*. The *visitor* will
     be applied to all vertices after the subtree rooted at it was traversed.
     */
   def breadthFirst(roots: Seq[Node], visitor: GraphVisitor,
-    nodeFilter: (Node) => Boolean = anyNode ) {
+    edgeFilter: (Node, Node) => Boolean = anyEdge ) {
     val queue = new scala.collection.mutable.Queue[Node]
     val visited = new HashSet[Node]
 
@@ -97,7 +97,7 @@ object GraphWalker {
       visited += top
       visitor.start(top)
       for( inp <- top.inputs ) {
-        if( nodeFilter(inp) ) {
+        if( edgeFilter(top, inp) ) {
           if( !visited.contains(inp) ) {
             queue.dequeueFirst(_ == inp)
             queue.enqueue(inp)
@@ -116,21 +116,21 @@ object GraphWalker {
     be applied to all vertices after the subtree rooted at it was traversed.
     */
   def depthFirst(roots: Seq[Node], visitor: GraphVisitor,
-    nodeFilter: (Node) => Boolean = anyNode ) {
+    edgeFilter: (Node, Node) => Boolean = anyEdge ) {
 
     val grey = 1
     val black = 2
     val color = new HashMap[Node, Int]
 
     def recursiveDepthFirst(root: Node, visitor: GraphVisitor,
-      nodeFilter: (Node) => Boolean = anyNode ) {
+      edgeFilter: (Node, Node) => Boolean = anyEdge ) {
       visitor.start(root)
       color.put(root, grey)
       for( inp <- root.inputs ) {
-        if( nodeFilter(inp) ) {
+        if( edgeFilter(root, inp) ) {
           if( !color.contains(inp) ) {
             // unexplored "white" edge
-            recursiveDepthFirst(inp, visitor, nodeFilter)
+            recursiveDepthFirst(inp, visitor, edgeFilter)
           } else if ( color(inp) == grey ) {
             // back edge
             visitor.backEdge(root, inp)
@@ -146,7 +146,7 @@ object GraphWalker {
     // Loop over all nodes of the graph to deal with disconnected components.
     for( node <- roots ) {
       if( !color.contains(node) ) {
-        recursiveDepthFirst(node, visitor, nodeFilter)
+        recursiveDepthFirst(node, visitor, edgeFilter)
       }
     }
   }
@@ -159,7 +159,7 @@ object GraphWalker {
     The SCC a ``Node`` belongs to can be queried through its sccId field.
     */
   def tarjan(nodes: Seq[Node], visitor: (Node) => Unit,
-    nodeFilter: (Node) => Boolean = anyNode ) {
+    edgeFilter: (Node, Node) => Boolean = anyEdge ) {
     var sccId = 0
     var sccIndex = 0
     val stack = new Stack[Node]
@@ -173,7 +173,7 @@ object GraphWalker {
       stack.push(node)
 
       for( inp <- node.inputs ) {
-        if( nodeFilter(inp) ) {
+        if( edgeFilter(node, inp) ) {
           if( !index.contains(inp) ) {
             // Successor has not yet been visited.
             tarjanSCC(inp)

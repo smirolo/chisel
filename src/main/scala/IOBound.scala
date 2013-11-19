@@ -44,33 +44,6 @@ object NODIRECTION extends IODirection {
   override def toString: String = "NODIRECTION"
 }
 
-/* XXX
-// used for component to component connections
-object Binding {
-
-  def apply(m: Node, c: Module, ioComp: Module): Node = {
-    if (Module.isEmittingComponents) {
-      val res = c.findBinding(m);
-      if (res == null) {
-        val res = new IOBound()
-        res.inputs.append(m)
-        res.component = c;
-/* XXX rewrite Binding
-        c.nodes += res
-        res.init("", widthOf(0), m);
-        res.infer;
-        c.bindings += res;
- */
-        res
-      } else {
-        res;
-      }
-    } else {
-      m
-    }
-  }
-}
- */
 
 /** Pass through binding
 
@@ -128,7 +101,7 @@ class IOBound(var dir: IODirection = NODIRECTION,
     this
   }
 
-  def target: Node = inputs(0)
+  def target: Node = if( inputs.length > 0 ) inputs(0) else null
 
   override def slug: String = dir.toString + "[" + width + "]"
 }

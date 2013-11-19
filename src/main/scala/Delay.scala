@@ -138,13 +138,14 @@ class ROMemDelay(inits: Seq[Node],
 
 /** Reference to a location inside a state-holding register or sram.
   */
-class MemReference(mem: MemDelay, addr: Node) extends Node {
+class MemReference(memN: MemDelay, addrN: Node) extends Node {
 
-  inferWidth = new FixedWidth(log2Up(mem.depth))
+  inferWidth = new FixedWidth(log2Up(memN.depth))
+  this.inputs.append(memN)
+  this.inputs.append(addrN)
 
-  override def lvalue(): Node = {
-    new MemRead(this.mem, this.addr)
-  }
+  def mem = this.inputs(0).asInstanceOf[MemDelay]
+  def addr = this.inputs(1)
 
   override def rvalue( value: Node ): Node = {
     new MemWrite(this.mem, this.addr, value)

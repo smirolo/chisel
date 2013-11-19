@@ -87,14 +87,14 @@ class SInt extends Bits {
   def <= (right: SInt): Bool = LteS(this, right)
   def >= (right: SInt): Bool = GteS(this, right)
   def !=  (right: UInt): Bool = this != right.zext;
-  def >   (right: UInt): Bool = this > SInt(right.zext.node.lvalue());
-  def <   (right: UInt): Bool = this < SInt(right.zext.node.lvalue());
-  def >=  (right: UInt): Bool = this >= SInt(right.zext.node.lvalue());
-  def <=  (right: UInt): Bool = this <= SInt(right.zext.node.lvalue());
+  def >   (right: UInt): Bool = this > SInt(right.zext.lvalue());
+  def <   (right: UInt): Bool = this < SInt(right.zext.lvalue());
+  def >=  (right: UInt): Bool = this >= SInt(right.zext.lvalue());
+  def <=  (right: UInt): Bool = this <= SInt(right.zext.lvalue());
 
   override def ===(right: Data): Bool = {
     right match {
-      case right: UInt => UInt(this.node.lvalue()) === right.zext;
+      case right: UInt => UInt(this.lvalue()) === right.zext;
       case _ => super.===(right)
     }
   }
@@ -122,20 +122,20 @@ object SignRev {
       if( opand.isConst ) {
         Literal(-opand.node.asInstanceOf[Literal].value, opand.node.width)
       } else {
-        new SignRevOp(opand.node.lvalue())
+        new SignRevOp(opand.lvalue())
       })
   }
 }
 
 object DivS {
   def apply[T <: SInt]( left: SInt, right: SInt): SInt = {
-      SInt(new DivSOp(left.node.lvalue(), right.node.lvalue()))
+      SInt(new DivSOp(left.lvalue(), right.lvalue()))
   }
 }
 
 object DivSU {
   def apply[T <: SInt]( left: T, right: UInt)(implicit m: Manifest[T]): T = {
-    val op = new DivSUOp(left.node.lvalue(), right.node.lvalue())
+    val op = new DivSUOp(left.lvalue(), right.lvalue())
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
     result
@@ -144,7 +144,7 @@ object DivSU {
 
 object MulS {
   def apply[T <: SInt]( left: T, right: T)(implicit m: Manifest[T]): T = {
-    val op = new MulSOp(left.node.lvalue(), right.node.lvalue())
+    val op = new MulSOp(left.lvalue(), right.lvalue())
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
     result
@@ -153,7 +153,7 @@ object MulS {
 
 object MulSU {
   def apply[T <: SInt]( left: T, right: UInt)(implicit m: Manifest[T]): T = {
-    val op = new MulSUOp(left.node.lvalue(), right.node.lvalue())
+    val op = new MulSUOp(left.lvalue(), right.lvalue())
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
     result
@@ -162,7 +162,7 @@ object MulSU {
 
 object RemS {
   def apply[T <: SInt]( left: T, right: T)(implicit m: Manifest[T]): T = {
-    val op = new RemSOp(left.node.lvalue(), right.node.lvalue())
+    val op = new RemSOp(left.lvalue(), right.lvalue())
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
     result
@@ -171,7 +171,7 @@ object RemS {
 
 object RemSU {
   def apply[T <: SInt]( left: T, right: UInt)(implicit m: Manifest[T]): T = {
-    val op = new RemSUOp(left.node.lvalue(), right.node.lvalue())
+    val op = new RemSUOp(left.lvalue(), right.lvalue())
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
     result

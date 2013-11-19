@@ -51,7 +51,6 @@ abstract class Data extends nameable {
     findFirstUserLine(Thread.currentThread().getStackTrace)
       getOrElse Thread.currentThread().getStackTrace()(0))
 
-
   /* Component this AST Data Type belongs to. We use it
    in the <> operator to bind nodes. */
   val component: Module = Module.scope.topModule
@@ -141,19 +140,11 @@ abstract class Data extends nameable {
     */
   def flip(): this.type
 
-  def procAssign(src: Node): Unit = {
-    if(this.getClass != src.getClass) {
-      ChiselError.error("procAssign not defined on " + this.getClass
-        + " and " + src.getClass);
-    }
-  }
-
   def :=(data: Data): Unit = {
     if(this.getClass != data.getClass) {
       ChiselError.error(":= not defined on " + this.getClass
         + " and " + data.getClass);
     }
-// XXX fix later:    this procAssign data.node;
   }
 
   override def clone(): this.type = {

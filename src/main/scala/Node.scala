@@ -137,10 +137,6 @@ abstract class Node extends nameable {
     ((isIo && isInObject) || isReg || (Module.isDebug && !name.isEmpty))
 
 
-  /** Returns the lvalue associated with the node */
-  def lvalue(): Node = this
-
-
   /** Assign and returns the rvalue associated with the node */
   def rvalue( value: Node ): Node = {
     ChiselError.error("cannot assign to wire net")

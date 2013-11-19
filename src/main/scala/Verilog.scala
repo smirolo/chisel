@@ -108,7 +108,7 @@ class VerilogBackend extends Backend {
   /** Emit a width suffix */
   def emitWidth(node: Node): String = {
 
-    if (node.width == 1) "" else "[" + (node.width-1) + ":0] "
+    if (node.width == 1) "" else "[" + (node.width-1) + ":0]"
   }
 
   override def emitTmp(node: Node): String =
@@ -196,6 +196,7 @@ class VerilogBackend extends Backend {
         w match {
           case io: IOBound  =>
             if (io.dir == INPUT) { // if reached, then input has consumers
+              println("XXX [emitDef] " + io)
               if (io.inputs.length == 0) {
                 portDec = "//" + portDec
               } else if (io.inputs.length > 1) {
@@ -203,22 +204,16 @@ class VerilogBackend extends Backend {
                     ChiselError.warning("" + io + " CONNECTED TOO MUCH " + io.inputs.length);
                   }
                 portDec = "//" + portDec
-              } else if (!c.isWalked.contains(io)){
-                  if(Module.saveConnectionWarnings) {
-                    ChiselError.warning(" UNUSED INPUT " + io + " OF " + c + " IS REMOVED");
-                  }
-                portDec = "//" + portDec
               } else {
                 portDec += emitRef(io.inputs(0));
               }
             } else if(io.dir == OUTPUT) {
               if (io.consumers.length == 0) {
-                  // if(Module.saveConnectionWarnings) {
-                  //   ChiselError.warning("" + io + " UNCONNECTED IN " + io.component + " BINDING " + c.findBinding(io));
-                  // } removed this warning because pruneUnconnectedsIOs should have picked it up
+                /* pruneUnconnectedsIOs should have picked it up so no need
+                 to generate a warning here. */
                 portDec = "//" + portDec
               } else {
-                var consumer: Node = c.parent.findBinding(io);
+                val consumer: Node = io.consumers.head
                 if (consumer == null) {
                   if(Module.saveConnectionWarnings) {
                     ChiselError.warning("" + io + "(" + io.component + ") OUTPUT UNCONNECTED (" + io.consumers.length + ") IN " + c.parent);
@@ -311,11 +306,17 @@ class VerilogBackend extends Backend {
         ("  assign " + emitTmp(x) + " = {"
           + emitRef(x.inputs(0)) + "{" + x.n + "}};\n");
 
+      case ll: ListLookupRef => {
+        println("XXX [Verilog::ListLookupRef] " + ll)
+        ""
+      }
+
       case ll: ListLookup => {
+        println("XXX [Verilog::ListLookup] " + ll.inputs.size)
         val res = new StringBuilder()
         res.append("  always @(*) begin\n" +
                    //"    " + emitRef + " = " + inputs(1).emitRef + ";\n" +
-                   "    casez (" + emitRef(ll.inputs(0)) + ")" + "\n");
+                   "    casez (" + emitRef(ll.addr) + ")" + "\n");
 
         for ((addr, data) <- ll.map) {
           res.append("      " + emitRef(addr) + " : begin\n");
@@ -452,31 +453,31 @@ class VerilogBackend extends Backend {
   def emitSigned(n: Node): String = if(n.isSigned) " signed " else ""
 
   def emitDecBase(node: Node): String = {
-    "  wire " + emitSigned(node) + emitWidth(node) + emitRef(node) + ";\n"
+    "  wire" + emitSigned(node) + emitWidth(node) + " " + emitRef(node) + ";\n"
   }
 
   override def emitDec(node: Node): String = {
     val res =
     node match {
       case x: ListLookupRef =>
-        "  reg " + emitSigned(x) + emitWidth(x) + emitRef(x) + ";\n";
+        "  reg" + emitSigned(x) + emitWidth(x) + " " + emitRef(x) + ";\n";
 
       case x: Lookup =>
-        "  reg " + emitSigned(x) + emitWidth(x) + emitRef(x) + ";\n";
+        "  reg" + emitSigned(x) + emitWidth(x) + " " + emitRef(x) + ";\n";
 
       case x: Sprintf =>
-        "  reg " + emitSigned(x) + emitWidth(x) + emitRef(x) + ";\n";
+        "  reg" + emitSigned(x) + emitWidth(x) + " " + emitRef(x) + ";\n";
 
       case x: Literal =>
         ""
 
       case x: RegDelay =>
-          "  reg " + emitSigned(x) + emitWidth(x) + emitRef(x) + (
+          "  reg" + emitSigned(x) + emitWidth(x) + " " + emitRef(x) + (
             if( x.depth > 1) " [" + (x.depth-1) + ":0]" else "") + ";\n"
 
       case m: MemDelay =>
         if (m.isInline) {
-          "  reg " + emitWidth(m) + emitRef(m) + " [" + (m.depth - 1) + ":0];\n"
+          "  reg" + emitWidth(m) + " " + emitRef(m) + " [" + (m.depth - 1) + ":0];\n"
         } else {
           ""
         }
@@ -484,8 +485,10 @@ class VerilogBackend extends Backend {
       case x: MemAccess =>
         emitDecBase(node)
 
+        // XXX need to display effective connection to sub modules
       case x: IOBound =>
-          ""
+        println("XXX [emitDec] " + x)
+        emitDecBase(node)
 
       case _ =>
         emitDecBase(node)
@@ -664,7 +667,7 @@ class VerilogBackend extends Backend {
 
   def emitDecs(c: Module): StringBuilder = {
     val res = new StringBuilder();
-    for (m <- c.mods) {
+    for (m <- c.mods -- c.io.flatten.map(x => x._2.node)) {
       res.append(emitDec(m))
     }
     res
@@ -679,7 +682,7 @@ class VerilogBackend extends Backend {
     var first = true;
     var nl = "";
     if (c.clocks.length > 0 || c.resets.size > 0)
-      res.append((c.clocks ++ c.resets.values.toList).map(x => "input " + emitRef(x)).reduceLeft(_ + ", " + _))
+      res.append((c.clocks ++ c.resets.values.toList).map(x => "input" + emitRef(x)).reduceLeft(_ + ", " + _))
     val ports = new ArrayBuffer[StringBuilder]
     for ((n, w) <- c.wires) {
       // if(first && !hasReg) {first = false; nl = "\n"} else nl = ",\n";
@@ -687,11 +690,11 @@ class VerilogBackend extends Backend {
         case io: IOBound => {
           val prune = if (io.prune && c != Module.topComponent) "//" else ""
           if (io.dir == INPUT) {
-            ports += new StringBuilder(nl + "    " + prune + "input " + 
-                                       emitSigned(io) + emitWidth(io) + " " + emitRef(io));
+            ports += new StringBuilder(nl + "    " + prune + "input" +
+              emitSigned(io) + emitWidth(io) + " " + emitRef(io));
           } else if(io.dir == OUTPUT) {
-            ports += new StringBuilder(nl + "    " + prune + "output" + 
-                                       emitSigned(io) + emitWidth(io) + " " + emitRef(io));
+            ports += new StringBuilder(nl + "    " + prune + "output" +
+              emitSigned(io) + emitWidth(io) + " " + emitRef(io));
           }
         }
       };

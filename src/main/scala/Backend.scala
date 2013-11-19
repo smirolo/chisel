@@ -105,13 +105,8 @@ abstract class Backend {
         && isPublic(m.getModifiers()) && !(Module.keywords contains name)) {
         val o = m.invoke(root);
         o match {
-         case node: Data => {
-           /* XXX It seems to always be true. How can name be empty? */
-           if ((name != ""
-             || node.name == null || (node.name == "" && !node.named))) {
-             node.nameIt(asValidName(name));
-           }
-           nameSpace += node.name;
+         case data: Data => {
+           nameSpace += data.nameIt(asValidName(name)).name
          }
          case buf: ArrayBuffer[_] => {
            /* We would prefer to match for ArrayBuffer[Data] but that's
@@ -187,10 +182,13 @@ abstract class Backend {
     }
 
     for (bind <- root.bindings) {
-      var genName = if (bind.target.name == null || bind.target.name.length() == 0) "" else bind.target.component.name + "_" + bind.target.name;
-      if(nameSpace.contains(genName)) genName += ("_" + emitIndex);
-      bind.name = asValidName(genName); // Not using nameIt to avoid override
-      bind.named = true;
+      if( bind.target != null ) {
+        /* the IOBound is connected. */
+        var genName = if(bind.target.name.isEmpty) "" else bind.target.component.name + "_" + bind.target.name;
+        if(nameSpace.contains(genName)) genName += ("_" + emitIndex);
+        bind.name = asValidName(genName); // Not using nameIt to avoid override
+        bind.named = true;
+      }
     }
   }
 
@@ -342,17 +340,9 @@ abstract class Backend {
     for ((name, o) <- outputs) {
       val node = o.node
       if (node.inputs.length == 0) {
-        if (node.consumers.length > 0) {
-          if (Module.warnOutputs)
-            /* XXX fix line
-            ChiselError.warning({"UNCONNETED OUTPUT " + emitRef(node) + " in component " + node.component + " has consumers on line " + node.consumers(0).line})
-             */
-          node.driveRand = true
-        } else {
-          if (Module.warnOutputs)
-            ChiselError.warning({"FLOATING OUTPUT " + emitRef(node) + " in component " + node.component})
-          node.prune = true
-        }
+        if (Module.warnOutputs)
+          ChiselError.warning({"UNCONNETED OUTPUT " + emitRef(node) + " in component " + node.component})
+        node.driveRand = true
       }
     }
   }

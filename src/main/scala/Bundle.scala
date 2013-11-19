@@ -213,6 +213,7 @@ class Bundle extends AggregateData[String] {
   }
 
   override def <>(right: Data) {
+    println("XXX [Bundle] " + this + " <> " + right)
     right match {
       case other: Bundle => {
         for ((n, i) <- elements) {

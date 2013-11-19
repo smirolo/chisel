@@ -276,5 +276,11 @@ class Literal extends Node {
   override def isInVCD: Boolean = false
 
   def d (x: BigInt): Literal = Literal(x, value.toInt)
+
+  override def nameIt( path: String ): this.type = {
+    // Donot change the name of a Literal because it is the actual value.
+    this
+  }
+
 }
 

@@ -227,8 +227,6 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
   /** Name of the module this component generates (defaults to class name). */
   var moduleName: String = "";
   var named = false;
-  val bindings = new ArrayBuffer[IOBound];
-  var wiresCache: Array[(String, Bits)] = null;
   var parent: Module = null;
   val children = new ArrayBuffer[Module];
   val debugs = HashSet[Node]();
@@ -300,25 +298,16 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     }
   }
 
-  def findBinding(m: Node): IOBound = {
-    for (b <- bindings) {
-      if (b.inputs(0) == m) {
-        return b
-      }
-    }
-    null
-  }
-
   def io: Data
 
   var isWalking = new HashSet[Node];
   var isWalked = new HashSet[Node];
   // override def toString: String = name this one isn't really working...
+
+  /** Returns a sequence of pairs (name, IOBound) that represents
+    the I/O interface of the component.
+    */
   def wires: Array[(String, Node)] = {
-    // if (wiresCache == null) {
-    //   wiresCache = io.flatten;
-    // }
-    // wiresCache
     io.flatten.map(x => (x._1, x._2.node))
   }
 
@@ -384,7 +373,7 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
   def clocks(tree: Boolean = false): Seq[Update] = {
     val clks = new ByClassVisitor[Update]()
     GraphWalker.depthFirst(io.nodes, clks,
-      if( tree ) GraphWalker.anyNode else GraphWalker.except[IOBound])
+      if( tree ) GraphWalker.anyEdge else GraphWalker.exceptEdge[IOBound, IOBound])
     clks.items
   }
 
@@ -563,10 +552,17 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     roots
   }
 
+  /** Set of nodes connecting this component to its sub-components.
+    */
+  def bindings: ArrayBuffer[IOBound] = {
+    (mods.filter(_.isInstanceOf[IOBound]) -- outputs()).map(x => x.asInstanceOf[IOBound])
+  }
+
+
   /** Accessible nodes from the IOs */
   def mods: ArrayBuffer[Node] = {
     val agg = new Reachable()
-    GraphWalker.depthFirst(outputs(), agg)
+    GraphWalker.depthFirst(outputs(), agg, GraphWalker.exceptEdge[IOBound, IOBound])
     agg.nodes
   }
 
@@ -699,7 +695,7 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     register. */
   def containsReg: Boolean = {
     val delays = new ByClassVisitor[Delay]()
-    GraphWalker.depthFirst(io.nodes, delays, GraphWalker.except[IOBound])
+    GraphWalker.depthFirst(io.nodes, delays, GraphWalker.exceptEdge[IOBound, IOBound])
     delays.items.length > 0
   }
 

@@ -68,7 +68,7 @@ class UInt extends Bits /* XXX with Numeric[UInt] */ {
   }
 
   def :=(src: UInt) {
-    this procAssign src.node;
+    this procAssign src;
   }
 
   // unary operators
@@ -105,13 +105,13 @@ class UInt extends Bits /* XXX with Numeric[UInt] */ {
 
 object Div {
   def apply( left: UInt, right: UInt): UInt = {
-    UInt(new DivOp(left.node.lvalue(), right.node.lvalue()))
+    UInt(new DivOp(left.lvalue(), right.lvalue()))
   }
 }
 
 object DivUS {
   def apply[T <: SInt]( left: UInt, right: T)(implicit m: Manifest[T]): T = {
-    val op = new DivUSOp(left.node.lvalue(), right.node.lvalue())
+    val op = new DivUSOp(left.lvalue(), right.lvalue())
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
     result
@@ -125,7 +125,7 @@ object Gte {
         Literal(if (left.node.asInstanceOf[Literal].value
           >= right.node.asInstanceOf[Literal].value) 1 else 0)
       } else {
-        new GteOp(left.node.lvalue(), right.node.lvalue())
+        new GteOp(left.lvalue(), right.lvalue())
       })
   }
 }
@@ -137,14 +137,14 @@ object Gtr {
         Literal(if (left.node.asInstanceOf[Literal].value
           > right.node.asInstanceOf[Literal].value) 1 else 0)
       } else {
-        new GtrOp(left.node.lvalue(), right.node.lvalue())
+        new GtrOp(left.lvalue(), right.lvalue())
     })
   }
 }
 
 object Log2 {
   def apply (opand: Bits, n: Int): UInt = {
-    UInt(new Log2Op(opand.node.lvalue(), Literal.sizeof(n-1)))
+    UInt(new Log2Op(opand.lvalue(), Literal.sizeof(n-1)))
   }
 }
 
@@ -154,7 +154,7 @@ object Lte {
       Literal(if (left.node.asInstanceOf[Literal].value
         <= right.node.asInstanceOf[Literal].value) 1 else 0)
     } else {
-      new LteOp(left.node.lvalue(), right.node.lvalue())
+      new LteOp(left.lvalue(), right.lvalue())
     })
   }
 }
@@ -166,14 +166,14 @@ object Ltn {
         Literal(if (left.node.asInstanceOf[Literal].value
           < right.node.asInstanceOf[Literal].value) 1 else 0)
       } else {
-        new LtnOp(left.node.lvalue(), right.node.lvalue())
+        new LtnOp(left.lvalue(), right.lvalue())
       })
   }
 }
 
 object Mul {
   def apply[T <: UInt]( left: T, right: T)(implicit m: Manifest[T]): T = {
-    val op = new MulOp(left.node.lvalue(), right.node.lvalue())
+    val op = new MulOp(left.lvalue(), right.lvalue())
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
     result
@@ -182,7 +182,7 @@ object Mul {
 
 object Rem {
   def apply[T <: UInt]( left: T, right: T)(implicit m: Manifest[T]): T = {
-    val op = new RemOp(left.node.lvalue(), right.node.lvalue())
+    val op = new RemOp(left.lvalue(), right.lvalue())
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
     result
@@ -191,7 +191,7 @@ object Rem {
 
 object RemUS {
   def apply[T <: SInt]( left: UInt, right: T)(implicit m: Manifest[T]): T = {
-    val op = new RemUSOp(left.node.lvalue(), right.node.lvalue())
+    val op = new RemUSOp(left.lvalue(), right.lvalue())
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
     result.node = op
     result
