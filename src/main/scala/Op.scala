@@ -213,8 +213,7 @@ class MulSUOp(left: Node, right: Node) extends MulOp(left, right) {
 class MuxOp(condNode: Node, thenNodeP: Node, elseNode: Node ) extends Op {
   override def slug = "mux";
 
-  inferWidth = new WidthOf(0)
-  Module.muxes += this;
+  inferWidth = new maxWidth()
   inputs.append(condNode)
   inputs.append(thenNodeP)
   inputs.append(elseNode)

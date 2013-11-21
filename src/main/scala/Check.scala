@@ -31,25 +31,23 @@
 package Chisel
 
 
-object VerifyMuxes {
+class VerifyMuxes extends GraphVisitor {
 
-  def apply( node: Node): Boolean = {
+  override def start( node: Node ): Unit = {
     node match {
       case mux: MuxOp =>
         if( mux.inputs.length != 3 ) {
           ChiselError.error("Mux " + mux.name + " has "
             + mux.inputs.length + " inputs (3 were expected).")
-          false
         }
         if( mux.inputs.length > 0 && mux.inputs(0).width != 1 ) {
           /* XXX If the input comes from a BlackBox, should we accept
            non 1-bit selector or create an ExtractOp ? */
           ChiselError.error("Mux " + mux.name + " has "
             + mux.inputs(0).width + "-bit selector (1-bit selector expected)")
-          false
         }
+      case _ => {}
     }
-    true
   }
 
 }

@@ -179,7 +179,6 @@ class StdlibSuite extends AssertionsForJUnit {
   /** Multiply an unsigned number by signed number */
   @Test def testMulUS() {
     println("\ntestMulUS ...")
-    try{
     class MulUS extends Module {
       val io = new Bundle {
         val x = UInt(INPUT, 32)
@@ -191,24 +190,19 @@ class StdlibSuite extends AssertionsForJUnit {
     chiselMain(Array[String]("--v",
       "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new MulUS()))
-    } catch {
-      case e => { println("XXX exception: "); e.printStackTrace }
-    }
     assertFile(tmpdir.getRoot() + "/StdlibSuite_MulUS_1.v",
 """module StdlibSuite_MulUS_1(
     input [31:0] io_x,
-    input  signed [31:0] io_y,
-    output signed [63:0] io_z
+    input [31:0] io_y,
+    output [63:0] io_z
 );
 
-  wire signed [63:0] T0;
-  wire signed [32:0] T1;
-  wire[32:0] T2;
+  wire [63:0] T0;
+  wire [32:0] T1;
 
   assign io_z = T0;
   assign T0 = $signed(io_y) * $signed(T1);
-  assign T1 = T2;
-  assign T2 = {1'h0/* 0*/, io_x};
+  assign T1 = {1'h0/* 0*/, io_x};
 endmodule
 
 """)
@@ -231,18 +225,16 @@ endmodule
     assertFile(tmpdir.getRoot() + "/StdlibSuite_DivUS_1.v",
 """module StdlibSuite_DivUS_1(
     input [31:0] io_x,
-    input  signed [31:0] io_y,
-    output signed [31:0] io_z
+    input [31:0] io_y,
+    output [31:0] io_z
 );
 
-  wire signed [31:0] T0;
-  wire signed [32:0] T1;
-  wire[32:0] T2;
+  wire [31:0] T0;
+  wire [32:0] T1;
 
   assign io_z = T0;
   assign T0 = $signed(T1) / $signed(io_y);
-  assign T1 = T2;
-  assign T2 = {1'h0/* 0*/, io_x};
+  assign T1 = {1'h0/* 0*/, io_x};
 endmodule
 
 """)
@@ -265,18 +257,16 @@ endmodule
     assertFile(tmpdir.getRoot() + "/StdlibSuite_RemUS_1.v",
 """module StdlibSuite_RemUS_1(
     input [31:0] io_x,
-    input  signed [31:0] io_y,
-    output signed [31:0] io_z
+    input [31:0] io_y,
+    output [31:0] io_z
 );
 
-  wire signed [31:0] T0;
-  wire signed [32:0] T1;
-  wire[32:0] T2;
+  wire [31:0] T0;
+  wire [32:0] T1;
 
   assign io_z = T0;
-  assign T0 = $signed(T1) u%s $signed(io_y);
-  assign T1 = T2;
-  assign T2 = {1'h0/* 0*/, io_x};
+  assign T0 = $signed(T1) % $signed(io_y);
+  assign T1 = {1'h0/* 0*/, io_x};
 endmodule
 
 """)
@@ -298,19 +288,17 @@ endmodule
       () => Module(new MulSU()))
     assertFile(tmpdir.getRoot() + "/StdlibSuite_MulSU_1.v",
 """module StdlibSuite_MulSU_1(
-    input  signed [31:0] io_x,
+    input [31:0] io_x,
     input [31:0] io_y,
-    output signed [63:0] io_z
+    output [63:0] io_z
 );
 
-  wire signed [63:0] T0;
-  wire signed [32:0] T1;
-  wire[32:0] T2;
+  wire [63:0] T0;
+  wire [32:0] T1;
 
   assign io_z = T0;
   assign T0 = $signed(io_x) * $signed(T1);
-  assign T1 = T2;
-  assign T2 = {1'h0/* 0*/, io_y};
+  assign T1 = {1'h0/* 0*/, io_y};
 endmodule
 
 """)
@@ -332,19 +320,17 @@ endmodule
       () => Module(new DivSU()))
     assertFile(tmpdir.getRoot() + "/StdlibSuite_DivSU_1.v",
 """module StdlibSuite_DivSU_1(
-    input  signed [31:0] io_x,
+    input [31:0] io_x,
     input [31:0] io_y,
-    output signed [31:0] io_z
+    output [31:0] io_z
 );
 
-  wire signed [31:0] T0;
-  wire signed [32:0] T1;
-  wire[32:0] T2;
+  wire [31:0] T0;
+  wire [32:0] T1;
 
   assign io_z = T0;
   assign T0 = $signed(io_x) / $signed(T1);
-  assign T1 = T2;
-  assign T2 = {1'h0/* 0*/, io_y};
+  assign T1 = {1'h0/* 0*/, io_y};
 endmodule
 
 """)
@@ -366,19 +352,17 @@ endmodule
       () => Module(new RemSU()))
     assertFile(tmpdir.getRoot() + "/StdlibSuite_RemSU_1.v",
 """module StdlibSuite_RemSU_1(
-    input  signed [31:0] io_x,
+    input [31:0] io_x,
     input [31:0] io_y,
-    output signed [31:0] io_z
+    output [31:0] io_z
 );
 
-  wire signed [31:0] T0;
-  wire signed [32:0] T1;
-  wire[32:0] T2;
+  wire [31:0] T0;
+  wire [32:0] T1;
 
   assign io_z = T0;
-  assign T0 = $signed(io_x) s%u $signed(T1);
-  assign T1 = T2;
-  assign T2 = {1'h0/* 0*/, io_y};
+  assign T0 = $signed(io_x) % $signed(T1);
+  assign T1 = {1'h0/* 0*/, io_y};
 endmodule
 
 """)
@@ -405,13 +389,13 @@ endmodule
 """module StdlibSuite_AssignBundleComp_1(
     input [1:0] io_in_v_0,
     input [1:0] io_in_v_1,
-    output[1:0] io_out_v_0,
-    output[1:0] io_out_v_1
+    output [1:0] io_out_v_0,
+    output [1:0] io_out_v_1
 );
 
 
-  assign io_out_v_1 = io_in_v_1;
   assign io_out_v_0 = io_in_v_0;
+  assign io_out_v_1 = io_in_v_1;
 endmodule
 
 """)
@@ -427,12 +411,26 @@ endmodule
         val y = UInt(INPUT, 8)
         val z = UInt(OUTPUT)
       }
-      io.z := Cat(io.x, io.y)
+      io.z := io.x ## io.y
     }
 
     chiselMain(Array[String]("--v",
       "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new CatComp()))
+assertFile(tmpdir.getRoot() + "/StdlibSuite_CatComp_1.v",
+"""module StdlibSuite_CatComp_1(
+    input [7:0] io_x,
+    input [7:0] io_y,
+    output [15:0] io_z
+);
+
+  wire [15:0] T0;
+
+  assign io_z = T0;
+  assign T0 = {io_x, io_y};
+endmodule
+
+""")
   }
 
   /** Generate a lookup into an array.

@@ -96,7 +96,6 @@ object Node {
   val components = ArrayBuffer[Module]();
   var sortedComps: ArrayBuffer[Module] = null
   val resetList = ArrayBuffer[Node]();
-  val muxes = ArrayBuffer[Node]();
   val nodes = ArrayBuffer[Node]()
   val blackboxes = ArrayBuffer[BlackBox]()
   /* XXX ioMap is solely set in the Bits constructor and solely used in
@@ -155,7 +154,6 @@ object Node {
     components.clear();
     printfs.clear();
     resetList.clear()
-    muxes.clear();
     blackboxes.clear();
     ioMap.clear()
     ioCount = 0;
@@ -373,7 +371,7 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
   def clocks(tree: Boolean = false): Seq[Update] = {
     val clks = new ByClassVisitor[Update]()
     GraphWalker.depthFirst(io.nodes, clks,
-      if( tree ) GraphWalker.anyEdge else GraphWalker.exceptEdge[IOBound, IOBound])
+      if( tree ) GraphWalker.anyEdge else BoundaryEdges.apply)
     clks.items
   }
 
@@ -541,7 +539,7 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     for (m <- mods) {
       m match {
         case io: IOBound => {
-          if (io.dir == OUTPUT) {
+          if (io.isDirected(OUTPUT)) {
             if (io.consumers.length == 0) roots += m;
           }
         }
@@ -562,7 +560,7 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
   /** Accessible nodes from the IOs */
   def mods: ArrayBuffer[Node] = {
     val agg = new Reachable()
-    GraphWalker.depthFirst(outputs(), agg, GraphWalker.exceptEdge[IOBound, IOBound])
+    GraphWalker.depthFirst(outputs(), agg, BoundaryEdges.apply)
     agg.nodes
   }
 
@@ -695,7 +693,7 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     register. */
   def containsReg: Boolean = {
     val delays = new ByClassVisitor[Delay]()
-    GraphWalker.depthFirst(io.nodes, delays, GraphWalker.exceptEdge[IOBound, IOBound])
+    GraphWalker.depthFirst(io.nodes, delays, BoundaryEdges.apply)
     delays.items.length > 0
   }
 
@@ -740,13 +738,6 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
        }
      }
      }
-  }
-
-
-  def verifyAllMuxes {
-    for(m <- Module.muxes) {
-      VerifyMuxes(m)
-    }
   }
 
 
@@ -818,7 +809,7 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
   }
 
   def isInput(node: Node): Boolean =
-    node match { case b:IOBound => b.dir == INPUT; case o => false }
+    node match { case b:IOBound => b.isDirected(INPUT); case o => false }
   def keepInputs(nodes: Seq[Node]): Seq[Node] =
     nodes.filter(isInput)
   def removeInputs(nodes: Seq[Node]): Seq[Node] =
@@ -837,4 +828,14 @@ class Reachable extends GraphVisitor {
     nodes += node
   }
 
+}
+
+
+/** Edges that flow between components.
+  */
+object BoundaryEdges {
+
+  def apply(source: Node, target: Node): Boolean = {
+    target != null && source.component == target.component
+  }
 }

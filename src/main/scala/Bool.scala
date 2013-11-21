@@ -49,10 +49,6 @@ object Bool {
 
 class Bool extends UInt {
 
-  def :=(src: Bool): Unit = {
-    this procAssign src
-  }
-
   def && (right: Bool): Bool = LogicalAnd(this, right)
   def || (right: Bool): Bool = LogicalOr(this, right)
 

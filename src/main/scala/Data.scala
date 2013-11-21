@@ -75,25 +75,6 @@ abstract class Data extends nameable {
 
   def fromBits( bits: Bits ): this.type
 
-/*
-  def toBool(): Bool = {
-    if(this.getWidth > 1) {
-      throw new Exception("multi bit signal " + this + " converted to Bool");
-    }
-    if(this.getWidth == -1) {
-      throw new Exception("unable to automatically convert " + this + " to Bool, convert manually instead")
-    }
-    chiselCast(this){Bool()};
-  }
-
-  // Interface required by Cat:
-  def ##[T <: Data](right: T): this.type = {
-    throw new Exception("## not defined on " + this.getClass + " and " + right.getClass)
-  }
-
-  def apply(name: String): Data = null
- */
-
   def nodes(): Seq[Node]
 
   def flatten: Array[(String, Bits)] = Array[(String, Bits)]();
@@ -140,10 +121,10 @@ abstract class Data extends nameable {
     */
   def flip(): this.type
 
-  def :=(data: Data): Unit = {
-    if(this.getClass != data.getClass) {
+  def :=(src: Data): Unit = {
+    if(this.getClass != src.getClass) {
       ChiselError.error(":= not defined on " + this.getClass
-        + " and " + data.getClass);
+        + " and " + src.getClass);
     }
   }
 
@@ -160,7 +141,6 @@ abstract class Data extends nameable {
     }
   }
 
-  def ^^(src: Data): Unit = {}
-  def <>(src: Data): Unit = {}
+  def <>(src: Data): Unit
 }
 

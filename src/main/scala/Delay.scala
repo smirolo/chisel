@@ -77,7 +77,7 @@ class RegDelay(clockNode: Update, nextNode: Node,
 
   def isReset: Boolean = (reset != null)
 
-  override def assigned: Boolean = (next != null)
+  override def assigned: Node = next
 
   override def rvalue( value: Node ): Node = {
     if( inputs.length > 0 ) {

@@ -243,62 +243,35 @@ class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
     }
   }
 
-  override def ^^(src: Data) {
-    src match {
-      case other: Vec[T] =>
-        for((b, o) <- self zip other.self)
-          b ^^ o
-    }
-  }
-
-  def <>(src: Vec[T]) {
-    for((b, e) <- self zip src)
-      b <> e;
-  }
-
   def <>(src: Iterable[T]) {
     for((b, e) <- self zip src)
       b <> e;
   }
 
   def :=[T <: Data](src: Iterable[T]): Unit = {
-
-    // Check matching size
-    assert(this.size == src.size, {
+    if( this.size != src.size ) {
       ChiselError.error("Can't wire together Vecs of mismatched lengths")
-    })
-/* XXX Skip for now
-    // Check LHS to make sure unidirection
-    val dirLHS = this.flatten(0)._2.dir
-    this.flatten.map(x => {assert(x._2.dir == dirLHS, {
-      ChiselError.error("Cannot mix directions on left hand side of :=")
-    })
-    })
-
-    // Check RHS to make sure unidirection
-    val dirRHS = src.head.flatten(0)._2.dir
-    for (elm <- src) {
-      elm.flatten.map(x => {assert(x._2.dir == dirRHS, {
-        ChiselError.error("Cannot mix directions on right hand side of :=")
-      })
-      })
-    }
- */
-    for((me, other) <- this zip src){
-      me match {
-        case bundle: Bundle =>
-          bundle := other.asInstanceOf[Bundle]
-        case v: Vec[_] =>
-          v := other.asInstanceOf[Vec[Data]]
-        case _ =>
-          me := other
+    } else {
+      for( (me, other) <- this zip src ) {
+        me := other
       }
     }
   }
 
-  def := (src: UInt) {
-    for(i <- 0 until length)
-      this(i) := src(i)
+  override def :=(src: Data): Unit = {
+    src match {
+      case uint: UInt =>
+        for(i <- 0 until length)
+          this(i) := uint(i)
+      case vec: Vec[_] => {
+        /* We would prefer to match for Vec[Data] but that's impossible
+         because of JVM constraints which lead to type erasure. */
+        val vecdata = vec.asInstanceOf[Vec[Data]]
+        this := vecdata.asInstanceOf[Iterable[Data]]
+      }
+      case _ =>
+        super.:=(src)
+    }
   }
 
   override def nameIt (path: String): this.type = {

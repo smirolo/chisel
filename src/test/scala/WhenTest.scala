@@ -79,7 +79,7 @@ class WhenSuite extends AssertionsForJUnit {
 
     assertFile(tmpdir.getRoot() + "/WhenSuite_WhenComp_1.v",
 """module WhenSuite_WhenComp_1(
-    input  io_in,
+    input io_in,
     output io_out
 );
 
@@ -116,8 +116,8 @@ endmodule
 
     assertFile(tmpdir.getRoot() + "/WhenSuite_EmbedWhenComp_1.v",
 """module WhenSuite_EmbedWhenComp_1(
-    input  io_in0,
-    input  io_in1,
+    input io_in0,
+    input io_in1,
     output io_out
 );
 
@@ -161,8 +161,8 @@ endmodule
 
     assertFile(tmpdir.getRoot() + "/WhenSuite_WhenClassComp_1.v",
 """module WhenSuite_WhenClassComp_1(
-    input  io_in0,
-    input  io_in1,
+    input io_in0,
+    input io_in1,
     output io_out
 );
 
@@ -170,18 +170,12 @@ endmodule
   wire T1;
   wire T2;
   wire T3;
-  wire T4;
-  wire T5;
-  wire T6;
 
   assign io_out = T0;
-  assign T0 = T5 ? 1'h0/* 0*/ : T1;
-  assign T1 = T3 ? io_in1 : T2;
-  assign T2 = io_in0 ? io_in0 : 1'h0/* 0*/;
-  assign T3 = T4 && io_in1;
-  assign T4 = ! io_in0;
-  assign T5 = ! T6;
-  assign T6 = io_in0 || io_in1;
+  assign T0 = T1 ? io_in1 : T3;
+  assign T1 = T2 && io_in1;
+  assign T2 = ! io_in0;
+  assign T3 = io_in0 ? io_in0 : 1'h0/* 0*/;
 endmodule
 
 """)
@@ -284,9 +278,9 @@ endmodule
         io.out := io.in1;
       }
       /**XXX why is this impossible?
-        elsewhen( io.in1 ) {
+        .elsewhen( io.in1 ) {
         io.out := io.in1;
-      } otherwise {
+      } .otherwise {
         io.out := Bool(false);
       }
       */
@@ -298,8 +292,8 @@ endmodule
 
     assertFile(tmpdir.getRoot() + "/WhenSuite_UnlessClassComp_1.v",
 """module WhenSuite_UnlessClassComp_1(
-    input  io_in0,
-    input  io_in1,
+    input io_in0,
+    input io_in1,
     output io_out
 );
 
@@ -340,10 +334,10 @@ endmodule
 """module WhenSuite_SwitchClassComp_1(
     input [7:0] io_in0,
     input [7:0] io_in1,
-    output[7:0] io_out
+    output [7:0] io_out
 );
 
-  wire[7:0] T0;
+  wire [7:0] T0;
   wire T1;
 
   assign io_out = T0;

@@ -67,10 +67,6 @@ class UInt extends Bits /* XXX with Numeric[UInt] */ {
     Bool(this.node)
   }
 
-  def :=(src: UInt) {
-    this procAssign src;
-  }
-
   // unary operators
   def zext: UInt = UInt(0, 1) ## this
   def unary_-(): SInt = SignRev(this.zext)

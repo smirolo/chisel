@@ -766,7 +766,7 @@ class CppBackend extends Backend {
     for ((n, w) <- c.wires) {
       w match {
         case io: IOBound  =>
-          if (io.dir == INPUT) {
+          if (io.isDirected(INPUT)) {
             res += ("  " + emitRef(c) + "->" + n + " = "
               + emitRef(io.inputs(0)) + ";\n");
           }
@@ -776,7 +776,7 @@ class CppBackend extends Backend {
     for ((n, w) <- c.wires) {
       w match {
         case io: IOBound =>
-          if (io.dir == OUTPUT) {
+          if (io.isDirected(OUTPUT)) {
             res += ("  " + emitRef(io.consumers(0)) + " = "
               + emitRef(c) + "->" + n + ";\n");
           }
@@ -822,7 +822,7 @@ class CppBackend extends Backend {
       }
     }
     c.findConsumers();
-    c.verifyAllMuxes;
+    verifyAllMuxes(c)
     ChiselError.checkpoint()
 
     c.collectNodes(c);

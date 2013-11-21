@@ -100,8 +100,6 @@ object Reg {
 
     // asOutput flip the direction and returns this.
     val res = gen.asOutput
-    println("XXX [Reg] res=" + res)
-
     if(init != null) {
       for((((res_n, res_i), (data_n, data_i)), (rval_n, rval_i))
         <- res.flatten zip d zip init.flatten) {

@@ -44,6 +44,10 @@ object NODIRECTION extends IODirection {
   override def toString: String = "NODIRECTION"
 }
 
+object BOTHDIRECTION extends IODirection {
+  override def toString: String = "BOTH"
+}
+
 
 /** Pass through binding
 
@@ -63,8 +67,13 @@ class IOBound(var dir: IODirection = NODIRECTION,
     this
   }
 
-  override def assigned: Boolean =
-    (this.inputs.length > 0 && this.inputs(0) != null)
+  override def assigned: Node = if (this.inputs.length > 0) this.inputs(0) else null
+
+  def isDirected( dir: IODirection ): Boolean = {
+    (( this.dir == dir )
+      || ( this.dir == BOTHDIRECTION && dir == INPUT )
+      || ( this.dir == BOTHDIRECTION && dir == OUTPUT ))
+  }
 
   override def asInput(): this.type = {
     dir = INPUT
@@ -76,11 +85,13 @@ class IOBound(var dir: IODirection = NODIRECTION,
     this
   }
 
+/* XXX deprecated
   def bind( target: IOBound ): this.type = {
     inputs.clear()
     inputs.append(target)
     this
   }
+ */
 
   override def flip(): this.type = {
     if (dir == INPUT) {

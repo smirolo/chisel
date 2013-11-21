@@ -319,8 +319,8 @@ abstract class Backend {
   }
 
   def pruneUnconnectedIOs(m: Module) {
-    val inputs = m.io.flatten.filter(x => x._2.node.isInstanceOf[IOBound] && x._2.node.asInstanceOf[IOBound].dir == INPUT)
-    val outputs = m.io.flatten.filter(x => x._2.node.isInstanceOf[IOBound] && x._2.node.asInstanceOf[IOBound].dir == OUTPUT)
+    val inputs = m.io.flatten.filter(x => x._2.node.isInstanceOf[IOBound] && x._2.node.asInstanceOf[IOBound].isDirected(INPUT))
+    val outputs = m.io.flatten.filter(x => x._2.node.isInstanceOf[IOBound] && x._2.node.asInstanceOf[IOBound].isDirected(OUTPUT))
 
     for ((name, i) <- inputs) {
       val node = i.node
@@ -530,7 +530,7 @@ abstract class Backend {
     transform(c, transforms)
     ChiselError.info("finished transforms")
 
-    Module.sortedComps.map(_.nodes.map(_.addConsumers))
+//XXX    Module.sortedComps.map(_.nodes.map(_.addConsumers))
 /* XXX re-implement clockdomains.
     val clkDomainWalkedNodes = new ArrayBuffer[Node]
     for (comp <- Module.sortedComps)
@@ -568,7 +568,7 @@ abstract class Backend {
   def checkPorts(topC: Module) {
 
     def prettyPrint(n: Node, c: Module) {
-      val dir = if (n.asInstanceOf[IOBound].dir == INPUT) "Input" else "Output"
+      val dir = n.asInstanceOf[IOBound].dir.toString()
       val portName = n.name
       val compName = c.name
       val compInstName = c.moduleName
@@ -596,6 +596,10 @@ abstract class Backend {
       res += (genIndent(i) + c.moduleName + " " + c.name + "\n")
     }
     ChiselError.info(res)
+  }
+
+  def verifyAllMuxes(c: Module) {
+    GraphWalker.depthFirst(c.outputs(), new VerifyMuxes())
   }
 
 }

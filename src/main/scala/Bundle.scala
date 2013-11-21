@@ -213,7 +213,6 @@ class Bundle extends AggregateData[String] {
   }
 
   override def <>(right: Data) {
-    println("XXX [Bundle] " + this + " <> " + right)
     right match {
       case other: Bundle => {
         for ((n, i) <- elements) {
@@ -230,17 +229,6 @@ class Bundle extends AggregateData[String] {
   }
 
 
-  override def ^^(src: Data) {
-    src match {
-      case other: Bundle =>
-        for ((n, i) <- elements) {
-          if(other.contains(n)) {
-            i ^^ other(n);
-          }
-        }
-    }
-  }
-
   def contains(name: String): Boolean = {
     for((n,i) <- elements)
       if(n == name) return true;
@@ -249,29 +237,15 @@ class Bundle extends AggregateData[String] {
 
   override def :=(src: Data): Unit = {
     src match {
-      case bun: Bundle => this := bun
-      case any => super.:=(any)
+      case bundle: Bundle => {
+        for((n, i) <- elements) {
+          if( bundle.contains(n) ) i := bundle(n)
+        }
+      }
+      case _ => super.:=(src)
     }
   }
 
-  def :=(src: Bundle): Unit = {
-    for((n, i) <- elements) {
-      i match {
-        case bundle: Bundle => {
-          if (src.contains(n)) bundle := src(n).asInstanceOf[Bundle]
-        }
-        case bits: Bits => {
-          if (src.contains(n)) bits := src(n).asInstanceOf[Bits]
-        }
-        case vec: Vec[_] => {
-           /* We would prefer to match for Vec[Data] but that's impossible
-            because of JVM constraints which lead to type erasure. */
-          val vecdata = vec.asInstanceOf[Vec[Data]]
-          if (src.contains(n)) vecdata := src(n).asInstanceOf[Vec[Data]]
-        }
-      }
-    }
-  }
 
   override def flatten: Array[(String, Bits)] = {
     var res = ArrayBuffer[(String, Bits)]();

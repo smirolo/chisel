@@ -34,6 +34,15 @@ import Reg._
 import ChiselError._
 import scala.collection.mutable.HashSet
 
+class PrintNode extends GraphVisitor {
+
+  override def start( node: Node ): Unit = {
+    println(node)
+  }
+
+}
+
+
 class DotBackend extends Backend {
   val keywords = new HashSet[String]();
 
@@ -43,7 +52,8 @@ class DotBackend extends Backend {
   }
 
   private def isDottable (m: Node): Boolean = {
-    if (m == m.component.defaultResetPin) {
+    if( m == null ) false
+    else if (m == m.component.defaultResetPin) {
       false
     } else {
       m match {
@@ -56,7 +66,7 @@ class DotBackend extends Backend {
 
   private def asValidLabel( node: Node ): String = {
     node match {
-      case op: Op => op.name;
+      case iob: IOBound => node.name + ":" + iob.dir
       case _             => {
         val typeName = node.getClass.getName.substring(7)
         node.name + ":" + typeName
@@ -84,7 +94,7 @@ class DotBackend extends Backend {
     }
     for (m <- top.mods) {
       if (isDottable(m)) {
-        if( m.component == top ) {
+//        if( m.component == top ) {
           /* We have to check the node's component agrees because output
            nodes are part of a component *mods* as well as its parent *mods*! */
           res.append(indent)
@@ -106,11 +116,11 @@ class DotBackend extends Backend {
             case reg: Delay => res.append("[shape=square," + label + "];\n")
             case _ => res.append("[" + label + "];\n")
           }
-        }
+ //       }
       }
     }
     for (m <- top.mods) {
-      if( m.component == top ) {
+ //     if( m.component == top ) {
         /* We have to check the node's component agrees because output
          nodes are part of a component *mods* as well as its parent *mods*! */
         for (in <- m.inputs) {
@@ -128,7 +138,7 @@ class DotBackend extends Backend {
             }
           }
         }
-      }
+ //     }
     }
     (res.toString, crossings.toString)
   }
@@ -184,5 +194,8 @@ class DotBackend extends Backend {
       {println("length:" + innercrossings.length + ", " + innercrossings)})
     out_d.write("}");
     out_d.close();
+
+    println("XXX All Reachable Nodes:")
+    GraphWalker.depthFirst(c.outputs(), new PrintNode)
   }
 }

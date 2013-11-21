@@ -80,7 +80,7 @@ abstract class Node extends nameable {
   //XXX used in Verilog code generator:
   var isSigned: Boolean = false
 
-  def assigned: Boolean = false
+  def assigned: Node = null
 
   var inferWidth: Width = null
 
@@ -95,16 +95,6 @@ abstract class Node extends nameable {
 
   def clearlyEquals(x: Node): Boolean = this == x
 
-/* XXX deprecated
-  // TODO: MOVE TO WIRE
-  def assign(src: Node) {
-    if (inputs.length > 0) {
-      inputs(0) = src;
-    } else {
-      inputs += src;
-    }
-  }
- */
   def asDirectionless(): this.type = this
 
   def asInput(): this.type = this

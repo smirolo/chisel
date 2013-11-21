@@ -70,7 +70,14 @@ class SInt extends Bits {
  */
 
   /** casting from UInt followed by assignment. */
-  def :=(src: UInt): Unit = this := src.zext;
+  override def :=(src: Data): Unit = {
+    src match {
+      case uint: UInt =>
+        this procAssign uint.zext;
+      case _ =>
+        super.:=(src)
+    }
+  }
 
   def gen[T <: Bits](): T = SInt().asInstanceOf[T];
 
@@ -111,7 +118,7 @@ class SInt extends Bits {
   def -   (right: UInt): SInt = this - right.zext;
   def *   (right: UInt): SInt = MulSU(this, right.zext)
   def /   (right: UInt): SInt = DivSU(this, right.zext)
-  def %   (right: UInt): SInt = DivSU(this, right.zext)
+  def %   (right: UInt): SInt = RemSU(this, right.zext)
   def abs: UInt = Mux(this < SInt(0), UInt((-this).node), UInt(this.node))
 }
 

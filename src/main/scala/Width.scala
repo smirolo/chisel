@@ -99,17 +99,11 @@ class WidthOf(index: Int, offset: Int = 0) extends Width {
 class maxWidth(offset: Int = 0) extends Width {
 
   override def forward(node: Node): Boolean = {
-/*XXX
-    var width = 0
-    for (i <- node.inputs)
-      if (!(i == null || i == node)) {
-        width = width.max(i.width)
-      }
- */
+// XXX inputs might be null on muxes.
+//    println("XXX [maxWidth] "  + node)
     val width = node.inputs.map(_.width).max + offset
     val update = (node.width != width)
     if( update ) node.width = width
-//    println("XXX [maxWidth(" + offset +")] " + node)
     update
   }
 

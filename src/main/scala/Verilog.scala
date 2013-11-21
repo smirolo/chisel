@@ -108,7 +108,7 @@ class VerilogBackend extends Backend {
   /** Emit a width suffix */
   def emitWidth(node: Node): String = {
 
-    if (node.width == 1) "" else "[" + (node.width-1) + ":0]"
+    if (node.width == 1) "" else " [" + (node.width-1) + ":0]"
   }
 
   override def emitTmp(node: Node): String =
@@ -195,8 +195,7 @@ class VerilogBackend extends Backend {
         var portDec = "." + n + "( ";
         w match {
           case io: IOBound  =>
-            if (io.dir == INPUT) { // if reached, then input has consumers
-              println("XXX [emitDef] " + io)
+            if (io.isDirected(INPUT)) { // if reached, then input has consumers
               if (io.inputs.length == 0) {
                 portDec = "//" + portDec
               } else if (io.inputs.length > 1) {
@@ -207,7 +206,7 @@ class VerilogBackend extends Backend {
               } else {
                 portDec += emitRef(io.inputs(0));
               }
-            } else if(io.dir == OUTPUT) {
+            } else if(io.isDirected(OUTPUT)) {
               if (io.consumers.length == 0) {
                 /* pruneUnconnectedsIOs should have picked it up so no need
                  to generate a warning here. */
@@ -255,7 +254,7 @@ class VerilogBackend extends Backend {
     val res =
     node match {
       case x: IOBound =>
-        if( x.dir == INPUT ) {
+        if( x.isDirected(INPUT) ) {
           ""
         } else {
           if (node.inputs.length == 0) {
@@ -277,11 +276,15 @@ class VerilogBackend extends Backend {
       }
 
       case x: DivSOp =>
-        (" assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
+        ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
           + "/ $signed(" + emitRef(x.right) + ");\n")
 
       case x: DivUSOp =>
-        (" assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
+        ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
+          + "/ $signed(" + emitRef(x.right) + ");\n")
+
+      case x: DivSUOp =>
+        ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
           + "/ $signed(" + emitRef(x.right) + ");\n")
 
       case x: ExtractOp =>
@@ -378,7 +381,19 @@ class VerilogBackend extends Backend {
         ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
           + "* $signed(" + emitRef(x.right) + ");\n")
 
+      case x: MulSUOp =>
+        ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
+          + "* $signed(" + emitRef(x.right) + ");\n")
+
       case x: RemSOp =>
+        ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
+          + "% $signed(" + emitRef(x.right) + ");\n")
+
+      case x: RemUSOp =>
+        ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
+          + "% $signed(" + emitRef(x.right) + ");\n")
+
+      case x: RemSUOp =>
         ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
           + "% $signed(" + emitRef(x.right) + ");\n")
 
@@ -450,7 +465,7 @@ class VerilogBackend extends Backend {
     (if (node.prune && res != "") "//" else "") + res
   }
 
-  def emitSigned(n: Node): String = if(n.isSigned) " signed " else ""
+  def emitSigned(n: Node): String = if(n.isSigned) " signed" else ""
 
   def emitDecBase(node: Node): String = {
     "  wire" + emitSigned(node) + emitWidth(node) + " " + emitRef(node) + ";\n"
@@ -483,11 +498,6 @@ class VerilogBackend extends Backend {
         }
 
       case x: MemAccess =>
-        emitDecBase(node)
-
-        // XXX need to display effective connection to sub modules
-      case x: IOBound =>
-        println("XXX [emitDec] " + x)
         emitDecBase(node)
 
       case _ =>
@@ -689,10 +699,10 @@ class VerilogBackend extends Backend {
       w match {
         case io: IOBound => {
           val prune = if (io.prune && c != Module.topComponent) "//" else ""
-          if (io.dir == INPUT) {
+          if (io.isDirected(INPUT)) {
             ports += new StringBuilder(nl + "    " + prune + "input" +
               emitSigned(io) + emitWidth(io) + " " + emitRef(io));
-          } else if(io.dir == OUTPUT) {
+          } else if(io.isDirected(OUTPUT)) {
             ports += new StringBuilder(nl + "    " + prune + "output" +
               emitSigned(io) + emitWidth(io) + " " + emitRef(io));
           }
@@ -817,7 +827,7 @@ class VerilogBackend extends Backend {
 
     val out = createOutputFile(c.name + ".v");
     doCompile(c, out, 0);
-    c.verifyAllMuxes;
+    verifyAllMuxes(c)
     ChiselError.checkpoint()
     out.close();
 

@@ -61,6 +61,9 @@ abstract class Bits extends Data {
    conditional assigments. */
   var default: Node = null
 
+  /** Stores the lvalue generated for an IOBound node. */
+  var cachedLValue: Node = null
+
   Module.ioMap += ((this, Module.ioCount));
   Module.ioCount += 1;
 
@@ -90,6 +93,7 @@ abstract class Bits extends Data {
 
   override def fromBits( bits: Bits ): this.type = {
     this.node = bits.node
+    this.cachedLValue = bits.cachedLValue
     this
   }
 
@@ -115,16 +119,20 @@ abstract class Bits extends Data {
         new MemRead(memref.mem, memref.addr)
 
       case iob: IOBound =>
-        if( iob.component == Module.scope.compStack.top )
+        if( Module.scope.compStack.isEmpty
+          || iob.component == Module.scope.compStack.top )
           iob
-        else
-          new IOBound(
-            if( iob.dir == INPUT ) OUTPUT
-            else if( iob.dir == OUTPUT ) INPUT
-            else NODIRECTION,
-            -1,
-            iob)
-
+        else {
+          if( cachedLValue == null ) {
+            cachedLValue = new IOBound(
+              if( iob.dir == INPUT ) OUTPUT
+              else if( iob.dir == OUTPUT ) INPUT
+              else NODIRECTION,
+              -1,
+              iob)
+          }
+          cachedLValue
+        }
       case _ => node
     }
   }
@@ -139,38 +147,42 @@ abstract class Bits extends Data {
 
   /* Assignment to this */
   def procAssign(src: Bits) {
-    var result: Node = null
     if( Module.scope.isDefaultCond() ) {
       if( default != null ) {
         if( default.inputs(2) != null ) {
           /* We are dealing with a default assignement but the default
            position is already occupied. */
-          ChiselError.warning("re-assignment to node under default condition.")
+          ChiselError.warning("re-assignment to mux (" + default + ") under default condition.")
         } else {
           default.inputs(2) = src.lvalue()
         }
       } else {
-        result = src.lvalue()
-        if( node != null && node.assigned ) {
-          /* We are dealing with a default assignement, there are no
-           mux tree but the default position is already occupied. */
-          ChiselError.warning("re-assignment to node under default condition.")
+        if( node != null ) {
+          if( node.assigned != null ) {
+            /* We are dealing with a default assignement, there are no
+             mux tree but the default position is already occupied. */
+            ChiselError.warning(
+              "re-assignment to node under default condition.")
+          }
+          node.rvalue(src.lvalue())
+        } else {
+          node = src.lvalue()
         }
       }
     } else {
-      result = new MuxOp(Module.scope.genCond(), src.lvalue(),
-        if( node != null ) lvalue() else null)
-      if( node == null || !node.assigned ) {
+      if( node != null && node.assigned != null ) {
+        node.rvalue(new MuxOp(
+          Module.scope.genCond(), src.lvalue(), node.assigned))
+      } else {
         /* First assignment we construct a mux tree with a dangling
          default position. */
-        default = result
+        default = new MuxOp(Module.scope.genCond(), src.lvalue(), null)
+        if( node != null ) {
+          node.rvalue(default)
+        } else {
+          node = default
+        }
       }
-    }
-    println("XXX [procAssign] node=" + node + ", result=" + result)
-    if( node != null ) {
-      node.rvalue(result)
-    } else {
-      node = result
     }
   }
 
@@ -202,34 +214,72 @@ abstract class Bits extends Data {
    Chisel warns users if ports have other than exactly one connection to them.
   */
   override def <>(right: Data): Unit = {
-    println("XXX [Bits] " + this + " <> " + right)
     right match {
       case other: Bits => this <> other;
-      case _ => super.<>(right)
+      case _ => this <> right.toBits()
     }
   }
 
   def <>(right: Bits) {
-    println("XXX [Bits<>(Bits)] " + this + " <> " + right)
-    node match {
-      case leftBond: IOBound =>
-        right.node match {
-          case rightBond: IOBound => {
-            if(leftBond.dir == INPUT && rightBond.dir == INPUT ) {
-              leftBond.bind(rightBond)
-            } else if (leftBond.dir == INPUT && rightBond.dir == OUTPUT ) {
-              leftBond.bind(rightBond)
-            } else if (leftBond.dir == OUTPUT && rightBond.dir == INPUT ) {
-              rightBond.bind(leftBond)
-            } else if (leftBond.dir == OUTPUT && rightBond.dir == OUTPUT ) {
-              leftBond.bind(rightBond)
+    var parent: Bits = null
+    var cousin: Bits = null
+    if( this.node.component == Module.scope.compStack.top ) {
+      if( right.node.component == Module.scope.compStack.top ) {
+        /* Both nodes are sibblings in the current component.
+         We wire INPUT <> OUTPUT. */
+      } else {
+        /* The left node is in the current component while
+         the right node is not (i.e. child or cousin).
+         We wire INPUT > INPUT and OUTPUT > OUTPUT. */
+        parent = this
+        cousin = right
+      }
+    } else {
+      if( right.node.component == Module.scope.compStack.top ) {
+        /* The right node is in the current component while
+         the left node is not (i.e. child or cousin).
+         We wire INPUT > INPUT and OUTPUT > OUTPUT. */
+        parent = right
+        cousin = this
+      } else {
+        /* Both nodes are sibblings. We wire INPUT <> OUTPUT. */
+      }
+    }
+
+    if( parent != null ) {
+      parent.node match {
+        case leftBond: IOBound =>
+          cousin.node match {
+            case rightBond: IOBound => {
+              if(leftBond.isDirected(INPUT) && rightBond.isDirected(INPUT) ) {
+                cousin := parent
+              } else if (leftBond.isDirected(OUTPUT) && rightBond.isDirected(OUTPUT) ) {
+                parent := cousin
+              } else {
+                ChiselError.error("matching parent against child/cousin with different directions.")
+              }
             }
+            case _ => ChiselError.error("<> matching against " + right.node.getClass.getName)
           }
-          case _ => ChiselError.error("<> matching against " + right.node.getClass.getName)
-        }
+      }
+    } else {
+      node match {
+        case leftBond: IOBound =>
+          right.node match {
+            case rightBond: IOBound => {
+              if(leftBond.isDirected(INPUT) && rightBond.isDirected(OUTPUT) ) {
+                this := right
+              } else if (leftBond.isDirected(OUTPUT) && rightBond.isDirected(INPUT) ) {
+                right := this
+              } else {
+                ChiselError.error("matching sibblings with same directions.")
+              }
+            }
+            case _ => ChiselError.error("<> matching against " + right.node.getClass.getName)
+          }
+      }
     }
   }
-
 
   override def clone: this.type = {
     val res = this.getClass.newInstance.asInstanceOf[this.type];
@@ -250,8 +300,13 @@ abstract class Bits extends Data {
 
     The assignment operator can be called multiple times
    */
-  def :=(src: Bits): Unit = {
-    this procAssign src;
+  override def :=(src: Data): Unit = {
+    src match {
+      case bits: Bits =>
+        this procAssign bits;
+      case _ =>
+        super.:=(src)
+    }
   }
 
 

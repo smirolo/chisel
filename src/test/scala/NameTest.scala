@@ -331,7 +331,8 @@ endmodule
       io.result := conn(0).ren | conn(1).ren | conn(2).ren | conn(3).ren
     }
 
-    chiselMain(Array[String]("--v"),
+    chiselMain(Array[String](//"--v"),
+      "--backend", "Chisel.DotBackend"),
 //      "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new BindThirdComp()))
     assertFile(tmpdir.getRoot() + "/NameSuite_BindThirdComp_1.v",
