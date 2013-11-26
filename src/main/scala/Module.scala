@@ -237,8 +237,6 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
   var defaultWidth = 32;
   var pathParent: Module = null;
   var verilog_parameters = "";
-  val clks = new ArrayBuffer[Clock]
-  val resets = new HashMap[Node, Node]
 
   def hasReset = !(reset == null)
   def hasClock = !(clock == null)
@@ -348,30 +346,10 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     res
   }
 
-  def addResetPin(reset: Bool) {
-    if (!this.resets.contains(reset.node)) {
-      val pin = 
-        if (reset == _reset) {
-          this.reset
-        } else {
-          val res = Bool(INPUT)
-          res.node.isIo = true
-          res.node.component = this
-          res
-        }
-      this.resets += (reset.node -> pin.node)
-    }
-  }
-
-  def addClock(clock: Clock) {
-    if (!this.clks.contains(clock))
-      this.clks += clock
-  }
-
   def clocks(tree: Boolean = false): Seq[Update] = {
     val clks = new ByClassVisitor[Update]()
     GraphWalker.depthFirst(io.nodes, clks,
-      if( tree ) GraphWalker.anyEdge else BoundaryEdges.apply)
+      if( tree ) GraphWalker.anyEdge else InnerEdges.apply)
     clks.items
   }
 
@@ -379,28 +357,15 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     clocks(tree=true)
   }
 
-  // returns the pin connected to the reset signal, creates a new one if 
-  // no such pin exists
-  def getResetPin(reset: Bool): Bool = {
-    addResetPin(reset)
-    Bool(resets(reset.node))
+  def resets(tree: Boolean = false): Seq[Node] = {
+    val rsts = new ByClassVisitor[Delay]()
+    GraphWalker.depthFirst(io.nodes, rsts,
+      if( tree ) GraphWalker.anyEdge else InnerEdges.apply)
+    rsts.items.map(x => { x.reset }).filter(_ != null)
   }
 
-  // COMPILATION OF BODY
-  def isInferenceTerminal(m: Node): Boolean = {
-    m.isFixedWidth || (
-      m match {
-        case b: IOBound => true;
-        case _ => false }
-    )
-    /*
-    var isAllKnown = true;
-    for (i <- m.inputs) {
-      if (i.width == -1)
-        isAllKnown = false;
-    }
-    isAllKnown
-    */
+  def resets: Seq[Node] = {
+    resets(tree=true)
   }
 
   def initializeBFS: ScalaQueue[Node] = {
@@ -471,55 +436,6 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     count
   }
 
-  def forceMatchingWidths {
-//XXX re-implement    bfs(_.forceMatchingWidths)
-  }
-
-  def addDefaultReset {
-    if (!(defaultResetPin == null)) {
-      addResetPin(_reset)
-      if (this != topComponent && hasExplicitReset)
-        defaultResetPin.node.inputs += _reset.node
-    }
-  }
-
-  // for every reachable delay element
-  // assign it a clock and reset where
-  // clock is chosen to be the component's clock if delay does not specify a clock
-  // reset is chosen to be 
-  //          component's explicit reset
-  //          delay's explicit clock's reset
-  //          component's clock's reset
-/*
-  def addClockAndReset {
-    bfs {x =>
-      {
-        if (x.isInstanceOf[Delay]) {
-          val clock = if (x.clock == null) x.component.clock else x.clock
-          if (x.isInstanceOf[RegDelay] && x.asInstanceOf[RegDelay].isReset ||
-              x.isInstanceOf[MemDelay] && !x.asInstanceOf[MemDelay].isInline) { // assign resets to regs
-            val reset =
-              if (x.component.hasExplicitReset)
-                x.component._reset
-              else if (x.clock != null)
-                x.clock.getReset
-              else if (x.component.hasExplicitClock)
-                x.component.clock.getReset
-              else
-                x.component._reset
-            x.inputs += x.component.getResetPin(reset).node
-          }
-          x.clock = clock
-          if (x.isInstanceOf[Mem[ _ ]])
-            for (i <- x.inputs)
-              if (i.isInstanceOf[MemWrite]) i.clock = clock
-          x.component.addClock(clock)
-        }
-      }
-    }
-  }
- */
-
   def findConsumers() {
     for (m <- mods) {
       m.addConsumers;
@@ -560,7 +476,7 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
   /** Accessible nodes from the IOs */
   def mods: ArrayBuffer[Node] = {
     val agg = new Reachable()
-    GraphWalker.depthFirst(outputs(), agg, BoundaryEdges.apply)
+    GraphWalker.depthFirst(outputs(), agg, InnerEdges.apply)
     agg.nodes
   }
 
@@ -693,7 +609,7 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     register. */
   def containsReg: Boolean = {
     val delays = new ByClassVisitor[Delay]()
-    GraphWalker.depthFirst(io.nodes, delays, BoundaryEdges.apply)
+    GraphWalker.depthFirst(io.nodes, delays, InnerEdges.apply)
     delays.items.length > 0
   }
 
@@ -833,7 +749,7 @@ class Reachable extends GraphVisitor {
 
 /** Edges that flow between components.
   */
-object BoundaryEdges {
+object InnerEdges {
 
   def apply(source: Node, target: Node): Boolean = {
     target != null && source.component == target.component

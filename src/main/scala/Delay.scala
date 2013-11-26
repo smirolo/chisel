@@ -60,28 +60,30 @@ class RegDelay(clockNode: Update, nextNode: Node,
   initNode: Node = null, resetNode: Node = null,
   val depth: Int = 1) extends Delay(clockNode) {
 
-  inferWidth = new WidthOf(0)
+  val CLOCK_NEXT = 1
+  val CLOCK_INIT = 2
+  val CLOCK_RESET = 3
 
-  val CLOCK_NEXT = 0
-  val CLOCK_NEXT_INIT = 1
-  val CLOCK_NEXT_INIT_RESET = 2
-
+  inferWidth = new WidthOf(1)
   this.inputs.append(nextNode)
   if( initNode != null ) this.inputs.append(initNode)
-  if( resetNode != null ) this.inputs.append(resetNode)
+  if( resetNode != null ) {
+    resetNode.isReset = true
+    this.inputs.append(resetNode)
+  }
 
-  def next: Node = this.inputs(1)
-  def init: Node  = if( this.inputs.length > 2 ) this.inputs(2) else null
+  def next: Node = this.inputs(CLOCK_NEXT)
+  def init: Node  = if( this.inputs.length > CLOCK_INIT ) this.inputs(CLOCK_INIT) else null
 
-  override def reset: Node  = if( this.inputs.length > 3 ) this.inputs(3) else null
+  override def reset: Node  = if( this.inputs.length > CLOCK_RESET ) this.inputs(CLOCK_RESET) else null
 
-  def isReset: Boolean = (reset != null)
+  def hasReset: Boolean = (reset != null)
 
   override def assigned: Node = next
 
   override def rvalue( value: Node ): Node = {
-    if( inputs.length > 0 ) {
-      inputs(0) = value
+    if( inputs.length > CLOCK_NEXT ) {
+      inputs(CLOCK_NEXT) = value
     } else {
       inputs.append(value)
     }
@@ -103,6 +105,7 @@ class MemDelay(clockNode: Update, resetNode: Node = null,
 
   inferWidth = new FixedWidth(1 * depth) // XXX compute width.
 
+  resetNode.isReset = true
   this.inputs.append(resetNode)
 
   override def reset: Node  = this.inputs(1)

@@ -59,7 +59,7 @@ abstract class Bits extends Data {
 
   /* Node to attach the default value while building a mux tree through
    conditional assigments. */
-  var default: Node = null
+  var default: MuxOp = null
 
   /** Stores the lvalue generated for an IOBound node. */
   var cachedLValue: Node = null
@@ -149,12 +149,12 @@ abstract class Bits extends Data {
   def procAssign(src: Bits) {
     if( Module.scope.isDefaultCond() ) {
       if( default != null ) {
-        if( default.inputs(2) != null ) {
+        if( default.otherwise != null ) {
           /* We are dealing with a default assignement but the default
            position is already occupied. */
           ChiselError.warning("re-assignment to mux (" + default + ") under default condition.")
         } else {
-          default.inputs(2) = src.lvalue()
+          default.inputs.append(src.lvalue())
         }
       } else {
         if( node != null ) {
@@ -176,7 +176,7 @@ abstract class Bits extends Data {
       } else {
         /* First assignment we construct a mux tree with a dangling
          default position. */
-        default = new MuxOp(Module.scope.genCond(), src.lvalue(), null)
+        default = new MuxOp(Module.scope.genCond(), src.lvalue())
         if( node != null ) {
           node.rvalue(default)
         } else {

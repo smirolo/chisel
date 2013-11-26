@@ -209,18 +209,18 @@ class MulSUOp(left: Node, right: Node) extends MulOp(left, right) {
   override def slug = "mulsu"
 }
 
-
-class MuxOp(condNode: Node, thenNodeP: Node, elseNode: Node ) extends Op {
+/** XXX elseNode null because of regEnable */
+class MuxOp(condNode: Node, thenNodeP: Node, elseNode: Node = null ) extends Op {
   override def slug = "mux";
 
   inferWidth = new maxWidth()
   inputs.append(condNode)
   inputs.append(thenNodeP)
-  inputs.append(elseNode)
+  if( elseNode != null ) inputs.append(elseNode)
 
   def cond: Node = inputs(0)
   def thenNode: Node = inputs(1)
-  def otherwise: Node = inputs(2)
+  def otherwise: Node = if( inputs.length > 2 ) inputs(2) else null
 
   def ::(a: Node): MuxOp = { inputs(2) = a; this }
 

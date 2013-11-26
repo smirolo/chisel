@@ -73,6 +73,8 @@ abstract class Node extends nameable {
   var prune = false
   var driveRand = false
 
+  var isReset = false
+
   /* XXX This field should really be in Delay.
    It is used by Backend.createClockDomain for unknown purpose. */
 //XXX  var clock: Update = null

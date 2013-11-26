@@ -43,7 +43,7 @@ object Clock {
 class Clock( reset: Bool, clk: Update = new Update()) extends Bool {
 
   node = clk
-  Module.scope.topModule.addClock(this)
+//XXX  Module.scope.topModule.addClock(this)
 
   // returns a reset pin connected to reset for the component in scope
   def getReset: Bool = reset

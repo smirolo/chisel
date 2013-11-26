@@ -401,25 +401,7 @@ abstract class Backend {
     }
   }
 
-  // go through every Module, add all clocks+resets used in it's tree to it's list of clocks+resets
-  def gatherClocksAndResets {
-    for (parent <- Module.sortedComps) {
-      for (child <- parent.children) {
-        for (reset <- child.resets.keys) {
-          // create a reset pin in parent if reset does not originate in parent and 
-          // if reset is not an output from one of parent's children
-          if (reset.component != parent && !parent.children.contains(reset.component))
-            parent.addResetPin(Bool(reset))
-
-          // special case for implicit reset
-          if (reset == Module.scope.implicitReset && parent == Module.topComponent)
-            if (!parent.resets.contains(reset))
-              parent.resets += (reset -> reset)
-        }
-      }
-    }
-  }
-
+/* XXX
   def connectResets {
     for (parent <- Module.sortedComps) {
       for (child <- parent.children) {
@@ -442,6 +424,7 @@ abstract class Backend {
       }
     }
   }
+ */
 
   // walk forward from root register assigning consumer clk = root.clock
 /* XXX to re-implement
@@ -488,24 +471,24 @@ abstract class Backend {
     transform(c, preElaborateTransforms)
     Module.components.foreach(_.postMarkNet(0));
     ChiselError.info("// COMPILING " + c + "(" + c.children.length + ")");
-    // Module.assignResets()
 
     levelChildren(c)
     Module.sortedComps = gatherChildren(c).sortWith(
       (x, y) => (x.level < y.level || (x.level == y.level && x.traversal < y.traversal)));
 
+/*XXX
     assignClockAndResetToModules
     Module.sortedComps.map(_.addDefaultReset)
-//XXX    c.addClockAndReset
+    c.addClockAndReset
     gatherClocksAndResets
     connectResets
-
+ */
     ChiselError.info("started width inference")
     val accessibleNodes = new ArrayBuffer[Node]
     GraphWalker.tarjan(c.outputs(), {node => node.inferWidth.forward(node)})
     ChiselError.info("finished width inference")
     ChiselError.info("start width checking")
-    c.forceMatchingWidths;
+//    c.forceMatchingWidths;
     ChiselError.info("finished width checking")
     ChiselError.info("started flattenning")
     ChiselError.checkpoint()
@@ -543,7 +526,7 @@ abstract class Backend {
     /* We execute nameAll after traceNodes because bindings would not have been
        created yet otherwise. */
     nameAll(c)
-    nameRsts
+//XXX    nameRsts
 
     for (comp <- Module.sortedComps ) {
       // remove unconnected outputs

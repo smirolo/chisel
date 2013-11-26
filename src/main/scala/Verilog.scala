@@ -185,7 +185,7 @@ class VerilogBackend extends Backend {
     }
     if (c.resets.size > 0 ) {
       if (c.clocks.length > 0) res = res + ", "
-      res = res + (c.resets.values.toList).map(x => "." + emitRef(x)
+      res = res + (c.resets.toList).map(x => "." + emitRef(x)
         + "(" + emitRef(x.inputs(0)) + ")").reduceLeft(_ + ", " + _)
     }
     var isFirst = true;
@@ -486,6 +486,9 @@ class VerilogBackend extends Backend {
       case x: Literal =>
         ""
 
+      case x: Update =>
+        ""
+
       case x: RegDelay =>
           "  reg" + emitSigned(x) + emitWidth(x) + " " + emitRef(x) + (
             if( x.depth > 1) " [" + (x.depth-1) + ":0]" else "") + ";\n"
@@ -500,8 +503,8 @@ class VerilogBackend extends Backend {
       case x: MemAccess =>
         emitDecBase(node)
 
-      case _ =>
-        emitDecBase(node)
+      case x =>
+        if( !x.isReset ) emitDecBase(node) else ""
     }
     (if (node.prune && res != "") "//" else "") + res
   }
@@ -620,7 +623,7 @@ class VerilogBackend extends Backend {
       case reg: RegDelay =>
         val enable = reg.enable
         if( enable != null ){
-          if(reg.isReset){
+          if(reg.hasReset){
             "    if(" + emitRef(reg.reset) + ") begin\n" +
             "      " + emitRef(reg) + " <= " + emitRef(reg.init) + ";\n" +
             "    end else if(" + emitRef(enable) + ") begin\n" +
@@ -633,7 +636,7 @@ class VerilogBackend extends Backend {
           }
         } else {
           "    " + emitRef(reg) + " <= " +
-          (if (reg.isReset) {
+          (if (reg.hasReset) {
             emitRef(reg.reset) + " ? " + emitRef(reg.init) + " : "
           } else {
             ""
@@ -692,7 +695,7 @@ class VerilogBackend extends Backend {
     var first = true;
     var nl = "";
     if (c.clocks.length > 0 || c.resets.size > 0)
-      res.append((c.clocks ++ c.resets.values.toList).map(x => "input" + emitRef(x)).reduceLeft(_ + ", " + _))
+      res.append((c.clocks ++ c.resets.toList).map(x => "input " + emitRef(x)).reduceLeft(_ + ", " + _))
     val ports = new ArrayBuffer[StringBuilder]
     for ((n, w) <- c.wires) {
       // if(first && !hasReg) {first = false; nl = "\n"} else nl = ",\n";
