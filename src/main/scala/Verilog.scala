@@ -255,7 +255,12 @@ class VerilogBackend extends Backend {
     node match {
       case x: IOBound =>
         if( x.isDirected(INPUT) ) {
-          ""
+          if( node.inputs.length > 0 && node.inputs(0) != null
+            && node.component == node.inputs(0).component ) {
+            "  assign " + emitTmp(node) + " = " + emitRef(node.inputs(0)) + ";\n"
+          } else {
+            ""
+          }
         } else {
           if (node.inputs.length == 0) {
             ChiselError.warning("UNCONNECTED " + node + " IN " + node.component); ""
@@ -373,7 +378,7 @@ class VerilogBackend extends Backend {
       }
 
       case x: MuxOp =>
-        println("XXX [emitDef] " + x)
+        // XXX .otherwise might be null
         ("  assign " + emitTmp(x) + " = "
           + (if(x.otherwise != null)
             (emitRef(x.cond) + " ? " + emitRef(x.thenNode)
@@ -796,11 +801,10 @@ class VerilogBackend extends Backend {
        We use a LinkedHashMap such that later iteration is predictable. */
     val defs = new HashMap[String, LinkedHashMap[String, ArrayBuffer[Module] ]];
     var level = 0;
-    for( c <- Module.sortedComps ) {
+    for( c <- sortedComps ) {
       ChiselError.info(depthString(depth) + "COMPILING " + c
         + " " + c.children.length + " CHILDREN"
         + " (" + c.level + "," + c.traversal + ")");
-      c.findConsumers();
       ChiselError.checkpoint()
 
       c.collectNodes(c);

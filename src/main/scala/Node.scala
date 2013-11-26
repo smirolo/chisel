@@ -159,18 +159,6 @@ abstract class Node extends nameable {
 
   def setIsClkInput {};
 
-
-  def addConsumers() {
-    for ((i, off) <- inputs.zipWithIndex) {
-      /* By construction we should not end-up with null inputs. */
-      assert(i != null, ChiselError.error("input " + off
-        + " of " + inputs.length + " for node " + this + " is null"))
-      if(!i.consumers.contains(this)) {
-        i.consumers += this;
-      }
-    }
-  }
-
 /** XXX good idea. deprecated?
   def extract (widths: Array[Int]): List[UInt] = {
     var res: List[UInt] = Nil;

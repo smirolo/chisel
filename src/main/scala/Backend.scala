@@ -53,6 +53,8 @@ abstract class Backend {
   /* Set of keywords which cannot be used as node and component names. */
   val keywords: HashSet[String];
 
+  var sortedComps: ArrayBuffer[Module] = null
+
   var traversalIndex = 0
 
   def createOutputFile(name: String): java.io.FileWriter = {
@@ -184,6 +186,7 @@ abstract class Backend {
         }
     }
 
+
     for (bind <- root.bindings) {
       if( bind.target != null ) {
         /* the IOBound is connected. */
@@ -193,6 +196,7 @@ abstract class Backend {
         bind.named = true;
       }
     }
+
   }
 
   /* Returns a string derived from _name_ that can be used as a valid
@@ -277,7 +281,8 @@ abstract class Backend {
 
     for ((name, i) <- inputs) {
       val node = i.node
-      if (node.inputs.length == 0 && m != Module.topComponent)
+      if (node.inputs.length == 0 && m != Module.topComponent) {
+        println("XXX [pruneUnconnectedIOs] " + node + " has " + node.consumers.length + " consumers")
         if (node.consumers.length > 0) {
           if (Module.warnInputs)
             ChiselError.warning({"UNCONNECTED INPUT " + emitRef(node) + " in COMPONENT " + node.component +
@@ -286,8 +291,10 @@ abstract class Backend {
         } else {
           if (Module.warnInputs)
             ChiselError.warning({"FLOATING INPUT " + emitRef(node) + " in COMPONENT " + node.component})
+          println("XXX [pruneUnconnectedIOs] prune=" + "FLOATING INPUT " + emitRef(node))
           node.prune = true
         }
+      }
     }
 
     for ((name, o) <- outputs) {
@@ -313,6 +320,9 @@ abstract class Backend {
       val prune = top.inputs.map(_.prune).foldLeft(true)(_ && _)
       pruneCount+= (if (prune) 1 else 0)
       top.prune = prune
+      if( prune ) {
+        println("XXX [pruneNodes] top.prune " + emitRef(top))
+      }
       for(i <- top.consumers) {
         if(!(i == null)) {
           if(!walked.contains(i)) {
@@ -346,7 +356,7 @@ abstract class Backend {
 
   // go through every Module and set its clock and reset field
   def assignClockAndResetToModules {
-    for (module <- Module.sortedComps.reverse) {
+    for (module <- sortedComps.reverse) {
       if (module.clock == null)
         module.clock = module.parent.clock
       if (!module.hasExplicitReset)
@@ -356,7 +366,7 @@ abstract class Backend {
 
 /* XXX
   def connectResets {
-    for (parent <- Module.sortedComps) {
+    for (parent <- sortedComps) {
       for (child <- parent.children) {
         for (reset <- child.resets.keys) {
           if (child.resets(reset).inputs.length == 0)
@@ -370,7 +380,7 @@ abstract class Backend {
   }
 
   def nameRsts {
-    for (comp <- Module.sortedComps) {
+    for (comp <- sortedComps) {
       for (rst <- comp.resets.keys) {
         if (!comp.resets(rst).named)
             comp.resets(rst).setName(rst.name)
@@ -426,12 +436,12 @@ abstract class Backend {
     ChiselError.info("// COMPILING " + c + "(" + c.children.length + ")");
 
     levelChildren(c)
-    Module.sortedComps = gatherChildren(c).sortWith(
+    sortedComps = gatherChildren(c).sortWith(
       (x, y) => (x.level < y.level || (x.level == y.level && x.traversal < y.traversal)));
 
 /*XXX
     assignClockAndResetToModules
-    Module.sortedComps.map(_.addDefaultReset)
+    sortedComps.map(_.addDefaultReset)
     c.addClockAndReset
     gatherClocksAndResets
     connectResets
@@ -451,10 +461,13 @@ abstract class Backend {
     transform(c, transforms)
     ChiselError.info("finished transforms")
 
-//XXX    Module.sortedComps.map(_.nodes.map(_.addConsumers))
+    for( m <- sortedComps ) {
+      GraphWalker.depthFirst(m.outputs(), new AddConsumersVisitor)
+    }
+
 /* XXX re-implement clockdomains.
     val clkDomainWalkedNodes = new ArrayBuffer[Node]
-    for (comp <- Module.sortedComps)
+    for (comp <- sortedComps)
       for (node <- comp.nodes)
         if (node.isInstanceOf[RegDelay])
             createClkDomain(node, clkDomainWalkedNodes)
@@ -466,7 +479,7 @@ abstract class Backend {
     nameAll(c)
 //XXX    nameRsts
 
-    for (comp <- Module.sortedComps ) {
+    for (comp <- sortedComps ) {
       // remove unconnected outputs
       pruneUnconnectedIOs(comp)
     }

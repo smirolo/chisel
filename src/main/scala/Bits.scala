@@ -116,7 +116,6 @@ abstract class Bits extends Data {
   def lvalue(): Node = {
     node match {
       case memref: MemReference => {
-        println("XXX [Bits.lvalue] " + memref)
         val read = new MemRead(memref.mem, memref.addr)
         memref.mem.ports.append(read)
         read
@@ -144,7 +143,6 @@ abstract class Bits extends Data {
   def rvalue( value: Node ): Node = {
     node match {
       case memref: MemReference =>
-        println("XXX [Bits.rvalue] " + memref)
         val write = new MemWrite(memref.mem, memref.addr,
           value, Module.scope.genCond())
         memref.mem.ports.append(write)

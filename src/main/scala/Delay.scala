@@ -65,7 +65,6 @@ class RegDelay(clockNode: Update, nextNode: Node,
   val CLOCK_RESET = 3
 
   inferWidth = new WidthOf(1)
-  println("XXX [RegDelay.init] inferWidth=" + inferWidth)
   this.inputs.append(nextNode)
   if( initNode != null ) this.inputs.append(initNode)
   if( resetNode != null ) {

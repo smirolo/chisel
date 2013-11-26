@@ -331,13 +331,12 @@ endmodule
       io.result := conn(0).ren | conn(1).ren | conn(2).ren | conn(3).ren
     }
 
-    chiselMain(Array[String](//"--v"),
-      "--backend", "Chisel.DotBackend"),
-//      "--targetDir", tmpdir.getRoot().toString()),
+    chiselMain(Array[String]("--v",
+      "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new BindThirdComp()))
     assertFile(tmpdir.getRoot() + "/NameSuite_BindThirdComp_1.v",
 """module NameSuite_Comp_1(
-    input  io_in_ren,
+    input io_in_ren,
     output io_out_ren
 );
 
@@ -346,17 +345,17 @@ endmodule
 endmodule
 
 module NameSuite_BindThirdComp_1(
-    input  io_in_ren,
+    input io_in_ren,
     output io_result
 );
 
-  wire NameSuite_Comp_1_2_io_out_ren;
-  wire NameSuite_Comp_1_1_io_out_ren;
-  wire NameSuite_Comp_1_0_io_out_ren;
   wire T0;
-  wire NameSuite_Comp_1_3_io_out_ren;
   wire T1;
   wire T2;
+  wire NameSuite_Comp_1_0_io_out_ren;
+  wire NameSuite_Comp_1_1_io_out_ren;
+  wire NameSuite_Comp_1_2_io_out_ren;
+  wire NameSuite_Comp_1_3_io_out_ren;
 
   assign io_result = T0;
   assign T0 = T1 | NameSuite_Comp_1_3_io_out_ren;
@@ -410,7 +409,7 @@ endmodule
     assertFile(tmpdir.getRoot() + "/NameSuite_BindFourthComp_1.v",
 """module NameSuite_BindFourthComp_1(
     input [4:0] io_in,
-    output[4:0] io_out
+    output [4:0] io_out
 );
 
 
@@ -648,28 +647,28 @@ endmodule
     assertFile(tmpdir.getRoot() + "/NameSuite_VecSecondComp_1.v",
 """module NameSuite_VecSecondComp_1(input clk,
     output io_requestor_0_req_ready,
-    input  io_requestor_0_req_valid,
-    input  io_requestor_0_req_bits_ready,
+    input io_requestor_0_req_valid,
+    input io_requestor_0_req_bits_ready,
     output io_requestor_1_req_ready,
-    input  io_requestor_1_req_valid,
-    input  io_requestor_1_req_bits_ready,
+    input io_requestor_1_req_valid,
+    input io_requestor_1_req_bits_ready,
     output io_requestor_2_req_ready,
-    input  io_requestor_2_req_valid,
-    input  io_requestor_2_req_bits_ready,
+    input io_requestor_2_req_valid,
+    input io_requestor_2_req_bits_ready,
     output io_requestor_3_req_ready,
-    input  io_requestor_3_req_valid,
-    input  io_requestor_3_req_bits_ready,
+    input io_requestor_3_req_valid,
+    input io_requestor_3_req_bits_ready,
     output io_mem
 );
 
   wire T0;
+  reg r_valid_3;
   wire T1;
+  reg r_valid_2;
   wire T2;
+  reg r_valid_1;
   wire T3;
-  reg[0:0] r_valid_0;
-  reg[0:0] r_valid_1;
-  reg[0:0] r_valid_2;
-  reg[0:0] r_valid_3;
+  reg r_valid_0;
 
   assign io_mem = T0;
   assign T0 = r_valid_3 ? io_requestor_3_req_ready : T1;
@@ -678,10 +677,10 @@ endmodule
   assign T3 = r_valid_0 ? io_requestor_0_req_ready : io_requestor_0_req_ready;
 
   always @(posedge clk) begin
-    r_valid_0 <= io_requestor_0_req_ready;
-    r_valid_1 <= io_requestor_1_req_ready;
-    r_valid_2 <= io_requestor_2_req_ready;
     r_valid_3 <= io_requestor_3_req_ready;
+    r_valid_2 <= io_requestor_2_req_ready;
+    r_valid_1 <= io_requestor_1_req_ready;
+    r_valid_0 <= io_requestor_0_req_ready;
   end
 endmodule
 
@@ -724,7 +723,7 @@ endmodule
       () => Module(new VariationComp()))
     assertFile(tmpdir.getRoot() + "/NameSuite_VariationComp_1.v",
 """module NameSuite_CompBlock_1_0(
-    input  io_valid,
+    input io_valid,
     output io_replay
 );
 
@@ -733,7 +732,7 @@ endmodule
 endmodule
 
 module NameSuite_CompBlock_1_1(
-    input  io_valid,
+    input io_valid,
     output io_replay
 );
 
@@ -742,15 +741,15 @@ module NameSuite_CompBlock_1_1(
 endmodule
 
 module NameSuite_VariationComp_1(
-    input  io_valid,
+    input io_valid,
     output io_replay
 );
 
   wire T0;
-  wire block_2_io_replay;
   wire T1;
-  wire block_1_io_replay;
   wire block_0_io_replay;
+  wire block_1_io_replay;
+  wire block_2_io_replay;
 
   assign io_replay = T0;
   assign T0 = T1 & block_2_io_replay;

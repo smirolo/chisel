@@ -94,7 +94,6 @@ object Node {
   var backend: Backend = null;
   var topComponent: Module = null;
   val components = ArrayBuffer[Module]();
-  var sortedComps: ArrayBuffer[Module] = null
   val resetList = ArrayBuffer[Node]();
   val nodes = ArrayBuffer[Node]()
   val blackboxes = ArrayBuffer[BlackBox]()
@@ -437,12 +436,6 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     count
   }
 
-  def findConsumers() {
-    for (m <- mods) {
-      m.addConsumers;
-    }
-  }
-
   /** Since we are relying on the out-degree of nodes (i.e. consumers.length),
     this method should only be called after the forward edges have been
     constructed. */
@@ -470,7 +463,9 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
   /** Set of nodes connecting this component to its sub-components.
     */
   def bindings: ArrayBuffer[IOBound] = {
-    (mods.filter(_.isInstanceOf[IOBound]) -- outputs()).map(x => x.asInstanceOf[IOBound])
+//XXX too many inner nodes    (mods.filter(_.isInstanceOf[IOBound]) -- outputs()).map(x => x.asInstanceOf[IOBound])
+    (mods.filter(x => x.inputs.length > 0 && x.inputs(0) != null
+            && x.component != x.inputs(0).component) -- outputs()).map(x => x.asInstanceOf[IOBound])
   }
 
 
