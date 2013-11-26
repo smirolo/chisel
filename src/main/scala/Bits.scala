@@ -115,9 +115,12 @@ abstract class Bits extends Data {
   /** Returns the lvalue associated with the node */
   def lvalue(): Node = {
     node match {
-      case memref: MemReference =>
-        new MemRead(memref.mem, memref.addr)
-
+      case memref: MemReference => {
+        println("XXX [Bits.lvalue] " + memref)
+        val read = new MemRead(memref.mem, memref.addr)
+        memref.mem.ports.append(read)
+        read
+      }
       case iob: IOBound =>
         if( Module.scope.compStack.isEmpty
           || iob.component == Module.scope.compStack.top )
@@ -134,6 +137,32 @@ abstract class Bits extends Data {
           cachedLValue
         }
       case _ => node
+    }
+  }
+
+  /** Assign and returns the rvalue associated with the node */
+  def rvalue( value: Node ): Node = {
+    node match {
+      case memref: MemReference =>
+        println("XXX [Bits.rvalue] " + memref)
+        val write = new MemWrite(memref.mem, memref.addr,
+          value, Module.scope.genCond())
+        memref.mem.ports.append(write)
+        write
+      case regd: RegDelay =>
+        if( regd.inputs.length > regd.CLOCK_NEXT ) {
+          regd.inputs(regd.CLOCK_NEXT) = value
+        } else {
+          regd.inputs.append(value)
+        }
+        regd
+      case iob: IOBound =>
+        iob.inputs.clear()
+        iob.inputs.append(value)
+        iob
+      case node =>
+        ChiselError.error("cannot assign to wire net")
+        node
     }
   }
 
@@ -164,21 +193,21 @@ abstract class Bits extends Data {
             ChiselError.warning(
               "re-assignment to node under default condition.")
           }
-          node.rvalue(src.lvalue())
+          rvalue(src.lvalue())
         } else {
           node = src.lvalue()
         }
       }
     } else {
       if( node != null && node.assigned != null ) {
-        node.rvalue(new MuxOp(
+        rvalue(new MuxOp(
           Module.scope.genCond(), src.lvalue(), node.assigned))
       } else {
         /* First assignment we construct a mux tree with a dangling
          default position. */
         default = new MuxOp(Module.scope.genCond(), src.lvalue())
         if( node != null ) {
-          node.rvalue(default)
+          rvalue(default)
         } else {
           node = default
         }

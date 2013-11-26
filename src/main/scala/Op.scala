@@ -48,6 +48,19 @@ abstract class UnaryOp(opandNode: Node) extends Op {
   def opand: Node = this.inputs(0)
 }
 
+
+/* XXX Prevent Verilog syntax errors when indexing constants
+ which we do on masks.
+ */
+class WrapOp(opand: Node) extends UnaryOp(opand) {
+
+  inferWidth = new WidthOf(0)
+
+  override def slug = ""
+  override val opPrefix = ""
+}
+
+
 /** Bitwise reverse
 */
 class BitwiseRevOp(opand: Node) extends UnaryOp(opand) {

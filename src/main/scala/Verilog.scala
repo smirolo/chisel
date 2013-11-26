@@ -373,9 +373,11 @@ class VerilogBackend extends Backend {
       }
 
       case x: MuxOp =>
+        println("XXX [emitDef] " + x)
         ("  assign " + emitTmp(x) + " = "
-          + emitRef(x.cond) + " ? " + emitRef(x.thenNode)
-          + " : " + emitRef(x.otherwise) + ";\n")
+          + (if(x.otherwise != null)
+            (emitRef(x.cond) + " ? " + emitRef(x.thenNode)
+              + " : " + emitRef(x.otherwise)) else emitRef(x.thenNode)) + ";\n")
 
       case x: MulSOp =>
         ("  assign " + emitTmp(x) + " = " + "$signed(" + emitRef(x.left) + ") "
@@ -425,7 +427,7 @@ class VerilogBackend extends Backend {
                 "\n")
             val name = getMemName(m, configStr)
             ChiselError.info("MEM " + name)
-            val clkrst = Array("    .CLK(" + m.clock + ")", "    .RST(" + emitRef(m.reset) + ")")
+            val clkrst = Array("    .CLK(" + emitRef(m.clock) + ")", "    .RST(" + emitRef(m.reset) + ")")
             val portdefs = for (i <- 0 until m.ports.size)
             yield emitPortDef(m.ports(i), i)
             "  " + name + " " + emitRef(m) + " (\n" +
@@ -608,8 +610,13 @@ class VerilogBackend extends Backend {
       clkDomains += (clock -> sb)
     }
     for (m <- c.mods) {
-      if( m.isInstanceOf[Delay] && m.asInstanceOf[Delay].clock != null )
-        clkDomains(m.asInstanceOf[Delay].clock).append(emitReg(m))
+      if( m.isInstanceOf[Delay] || m.isInstanceOf[MemWrite] ) {
+        val clock = (if( m.isInstanceOf[Delay] ) m.asInstanceOf[Delay].clock
+        else m.asInstanceOf[MemWrite].mem.clock)
+        if( clock != null ) {
+          clkDomains(clock).append(emitReg(m))
+        }
+      }
     }
     for (clock <- c.clocks) {
       clkDomains(clock).append("  end\n")

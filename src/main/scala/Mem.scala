@@ -45,6 +45,7 @@ object Mem {
     val gen = out.clone
     Reg.validateGen(gen)
     val res = new Mem(() => gen, clock, reset, depth, seqRead)
+    res.node.inferWidth = out.toBits.node.inferWidth
     res
   }
 
@@ -78,9 +79,19 @@ class Mem[T <: Data](gen: () => T, clock: Clock, reset: Bool, val depth: Int,
   val seqRead: Boolean, isInline: Boolean = Module.isInlineMem)
     extends AccessTracker {
 
-  val node = new MemDelay(clock.node.asInstanceOf[Update], reset.node, depth, isInline)
+  val node = new MemDelay(
+    clock.node.asInstanceOf[Update], reset.node, depth, isInline)
+
+  Module.scope.compStack.top.mems.append(node)
 
   def isInVCD = false
+
+  def nameIt(name: String): this.type = {
+    if( !named ) {
+      if( node != null ) node.nameIt(name)
+    }
+    this
+  }
 
   def writeAccesses: ArrayBuffer[MemWrite] =
     (writes ++ readwrites.map(_.write))
@@ -153,8 +164,9 @@ class Mem[T <: Data](gen: () => T, clock: Clock, reset: Bool, val depth: Int,
 /*
      }
      */
+
     val wr = new MemWrite(this.node, addr.node,
-      data.toBits.node, cond.node, wmask.node)
+      data.toBits.node, cond.node, new WrapOp(wmask.node))
     this.writes += wr
   }
 

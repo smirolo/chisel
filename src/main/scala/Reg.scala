@@ -110,7 +110,7 @@ object Reg {
           if( data_i != null ) data_i.node else null,
           if( rval_i != null ) rval_i.node else null,
           reset.node)
-        reg.inferWidth = res_i.node.inferWidth
+        reg.inferWidth = mType.toBits.node.inferWidth
         res_i.node = reg
       }
     } else {
@@ -120,7 +120,7 @@ object Reg {
           if( data_i != null ) data_i.node else null,
           null,
           reset.node)
-        reg.inferWidth = res_i.node.inferWidth
+        reg.inferWidth = mType.toBits.node.inferWidth
         res_i.node = reg
       }
     }

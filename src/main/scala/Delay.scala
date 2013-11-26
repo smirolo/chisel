@@ -65,6 +65,7 @@ class RegDelay(clockNode: Update, nextNode: Node,
   val CLOCK_RESET = 3
 
   inferWidth = new WidthOf(1)
+  println("XXX [RegDelay.init] inferWidth=" + inferWidth)
   this.inputs.append(nextNode)
   if( initNode != null ) this.inputs.append(initNode)
   if( resetNode != null ) {
@@ -81,15 +82,6 @@ class RegDelay(clockNode: Update, nextNode: Node,
 
   override def assigned: Node = next
 
-  override def rvalue( value: Node ): Node = {
-    if( inputs.length > CLOCK_NEXT ) {
-      inputs(CLOCK_NEXT) = value
-    } else {
-      inputs.append(value)
-    }
-    this
-  }
-
   def enable(): Node = {
     next match {
       case mux: MuxOp => mux.enable
@@ -103,8 +95,6 @@ class RegDelay(clockNode: Update, nextNode: Node,
 class MemDelay(clockNode: Update, resetNode: Node = null,
   val depth: Int = 1, isInlineP: Boolean = false) extends Delay(clockNode) {
 
-  inferWidth = new FixedWidth(1 * depth) // XXX compute width.
-
   resetNode.isReset = true
   this.inputs.append(resetNode)
 
@@ -113,15 +103,6 @@ class MemDelay(clockNode: Update, resetNode: Node = null,
   override def isInVCD = false
 
   def isInline = isInlineP
-
-//XXX  def isInline = Module.isInlineMem || !reads.isEmpty
-
-/* XXX
-  val writes = ArrayBuffer[MemWrite]()
-  val seqreads = ArrayBuffer[MemSeqRead]()
-  val reads = ArrayBuffer[MemRead]()
-  val readwrites = ArrayBuffer[MemReadWrite]()
- */
 
   val ports = new ArrayBuffer[MemAccess]()
 
@@ -144,27 +125,25 @@ class ROMemDelay(inits: Seq[Node],
 class MemReference(memN: MemDelay, addrN: Node) extends Node {
 
   inferWidth = new FixedWidth(log2Up(memN.depth))
+
   this.inputs.append(memN)
   this.inputs.append(addrN)
 
   def mem = this.inputs(0).asInstanceOf[MemDelay]
   def addr = this.inputs(1)
 
-  override def rvalue( value: Node ): Node = {
-    new MemWrite(this.mem, this.addr, value)
-  }
-
 }
 
 
 /** Base class for memory ports (read, write, read/write)
   */
-abstract class MemAccess(memi: MemDelay, addri: Node) extends Node {
+abstract class MemAccess(memN: MemDelay, addrN: Node) extends Node {
 
-  inputs += memi
-  inputs += addri
-  inferWidth = new FixedWidth(log2Up(mem.depth))
-  memi.ports.append(this)
+  inferWidth = new WidthOf(0)
+
+  inputs += memN
+  inputs += addrN
+  memN.ports.append(this)
 
   def mem: MemDelay = inputs(0).asInstanceOf[MemDelay]
   def addr: Node = inputs(1)
@@ -221,12 +200,12 @@ class MemSeqRead(mem: MemDelay, addri: Node) extends MemAccess(mem, addri) {
 
 /** Memory Write Port
   */
-class MemWrite(mem: MemDelay, addri: Node, datai: Node,
-  condi: Node = null, maski: Node = null) extends MemAccess(mem, addri) {
+class MemWrite(mem: MemDelay, addrN: Node, dataN: Node,
+  condN: Node, maskN: Node = null) extends MemAccess(mem, addrN) {
 
-  this.inputs += datai
-  this.inputs += (if( condi != null ) condi else Literal(1))
-  if( maski != null ) this.inputs += maski
+  this.inputs += dataN
+  this.inputs += condN
+  if( maskN != null ) this.inputs += maskN
 
 //XXX cannot override mutable variable  override def clock = mem.clock
 

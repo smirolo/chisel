@@ -128,13 +128,6 @@ abstract class Node extends nameable {
   def isInVCD: Boolean = width > 0 &&
     ((isIo && isInObject) || isReg || (Module.isDebug && !name.isEmpty))
 
-
-  /** Assign and returns the rvalue associated with the node */
-  def rvalue( value: Node ): Node = {
-    ChiselError.error("cannot assign to wire net")
-    this
-  }
-
   /** Prints all members of a node and recursively its inputs up to a certain
     depth level. This method is purely used for debugging. */
   def printTree(writer: PrintStream, depth: Int = 4, indent: String = ""): Unit = {

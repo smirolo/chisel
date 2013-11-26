@@ -228,8 +228,9 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
   var parent: Module = null;
   val children = new ArrayBuffer[Module];
   val debugs = HashSet[Node]();
+  val mems = new ArrayBuffer[MemDelay];
 
-  val nodes = new ArrayBuffer[Node]
+//  val nodes = new ArrayBuffer[Node]
   val omods = new ArrayBuffer[Node];
 
   val regs  = new ArrayBuffer[RegDelay];
@@ -493,6 +494,9 @@ abstract class Module(var clock: Clock = null, var _reset: Bool = null) {
     }
     for((n, flat) <- this.io.flatten) {
       res += flat.node
+    }
+    for( m <- mems ) {
+      res ++= m.writes()
     }
     res
   }

@@ -106,12 +106,6 @@ class IOBound(var dir: IODirection = NODIRECTION,
     return dir == NODIRECTION
   }
 
-  override def rvalue( value: Node ): Node = {
-    inputs.clear()
-    inputs.append(value)
-    this
-  }
-
   def target: Node = if( inputs.length > 0 ) inputs(0) else null
 
   override def slug: String = dir.toString + "[" + width + "]"

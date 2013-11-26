@@ -109,13 +109,16 @@ endmodule
       val io = new Bundle() {
         val out = UInt(OUTPUT, 32)
       }
-      // XXX Should the width be 32-bit here?
+      /* The width will be set to 1 bit while it will be set to 32 bit
+       when we use backward propagation. Using either results is arbitrary
+       and should propably lead to a warning.
+       */
       val res = Reg(init=UInt(0))
       res := res + UInt(1)
       io.out := res
     }
-    chiselMain(Array[String]("--v"),
-//      "--targetDir", tmpdir.getRoot().toString()),
+    chiselMain(Array[String]("--v",
+      "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new RegInitUpdate()))
     assertFile(tmpdir.getRoot() + "/DelaySuite_RegInitUpdate_1.v",
 """module DelaySuite_RegInitUpdate_1(input clk, input reset,
@@ -191,7 +194,7 @@ endmodule
       val mem= Mem(UInt(width=32), 8)
       io.out := mem(io.addr)
     }
-    chiselMain(Array[String]("--v", "--noInlineMem",
+    chiselMain(Array[String]("--v", "--inlineMem",
       "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new MemReadModule()))
     assertFile(tmpdir.getRoot() + "/DelaySuite_MemReadModule_1.v",
@@ -217,16 +220,17 @@ endmodule
 
   /** Uninitialized sram, one read and one write on each clock. */
   @Test def testReadWrite() {
+    println("\ntestReadWrite ...")
     class ReadWriteModule extends Module {
       val io = new Bundle() {
         val addr = UInt(INPUT, width=32)
         val out = UInt(OUTPUT)
       }
-      val mem= Mem(UInt(width=32), 8)
+      val mem = Mem(UInt(width=32), 8)
       mem(io.addr) := mem(io.addr) + UInt(1)
       io.out := mem(io.addr)
     }
-    chiselMain(Array[String]("--v", "--noInlineMem",
+    chiselMain(Array[String]("--v", "--inlineMem",
       "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new ReadWriteModule()))
     assertFile(tmpdir.getRoot() + "/DelaySuite_ReadWriteModule_1.v",
@@ -263,6 +267,7 @@ endmodule
 
   /** Uninitialized sram, one read and one write on each clock. */
   @Test def testReadCondWrite() {
+    println("\ntestReadCondWrite ...")
     class ReadCondWriteModule extends Module {
       val io = new Bundle() {
         val enable = Bool(INPUT)
@@ -278,7 +283,7 @@ endmodule
       }
       io.out := mem(io.addr)
     }
-    chiselMain(Array[String]("--v", "--noInlineMem",
+    chiselMain(Array[String]("--v", "--inlineMem",
       "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new ReadCondWriteModule()))
     assertFile(tmpdir.getRoot() + "/DelaySuite_ReadCondWriteModule_1.v",
@@ -345,7 +350,7 @@ endmodule
       }
       io.out := mem(io.addr)
     }
-    chiselMain(Array[String]("--v", "--noInlineMem",
+    chiselMain(Array[String]("--v", "--inlineMem",
       "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new ReadCondMaskedWrite()))
     assertFile(tmpdir.getRoot() + "/DelaySuite_ReadCondMaskedWrite_1.v",

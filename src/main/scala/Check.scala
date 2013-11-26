@@ -34,6 +34,7 @@ package Chisel
 class VerifyMuxes extends GraphVisitor {
 
   override def start( node: Node ): Unit = {
+/*XXX
     node match {
       case mux: MuxOp =>
         if( mux.inputs.length != 3 ) {
@@ -48,6 +49,7 @@ class VerifyMuxes extends GraphVisitor {
         }
       case _ => {}
     }
+ */
   }
 
 }

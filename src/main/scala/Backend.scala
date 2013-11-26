@@ -105,10 +105,13 @@ abstract class Backend {
         && isPublic(m.getModifiers()) && !(Module.keywords contains name)) {
         val o = m.invoke(root);
         o match {
-         case data: Data => {
-           nameSpace += data.nameIt(asValidName(name)).name
-         }
-         case buf: ArrayBuffer[_] => {
+          case data: Data => {
+            nameSpace += data.nameIt(asValidName(name)).name
+          }
+          case mem: Mem[_] => {
+            nameSpace += mem.nameIt(asValidName(name)).name
+          }
+          case buf: ArrayBuffer[_] => {
            /* We would prefer to match for ArrayBuffer[Data] but that's
             impossible because of JVM constraints which lead to type erasure.
             XXX Using Seq instead of ArrayBuffer will pick up members defined
@@ -262,56 +265,6 @@ abstract class Backend {
     res
   }
 
-  /** Nodes which are created outside the execution trace from the toplevel
-    component constructor (i.e. through the () => Module(new Top()) ChiselMain
-    argument) will have a component field set to null. For example, genMuxes,
-    forceMatchWidths and transforms (all called from Backend.elaborate) create
-    such nodes.
-
-    This method walks all nodes from all component roots (outputs, debugs).
-    and reassociates the component to the node both ways (i.e. in Module.nodes
-    and Node.component).
-
-    We assume here that all nodes at the components boundaries (io) have
-    a non-null and correct node/component association. We further assume
-    that nodes generated in elaborate are inputs to a node whose component
-    field is set.
-
-    Implementation Node:
-    At first we did implement *collectNodesIntoComp* to handle a single
-    component at a time but that did not catch the cases where Regs are
-    passed as input to sub-module without being tied to an output
-    of *this.component*.
-    */
-  def collectNodesIntoComp(dfsStack: Stack[Node]) {
-    val walked = new HashSet[Node]()
-    walked ++= dfsStack
-    // invariant is everything in the stack is walked and has a non-null component
-    while(!dfsStack.isEmpty) {
-      val node = dfsStack.pop
-      /*
-      we're tracing from outputs -> inputs, so if node is an input, then its
-      inputs belong to the outside component. Otherwise, its inputs are the same
-      as node's inputs.
-      */
-      val curComp = node.component
-      if (!node.component.nodes.contains(node))
-        node.component.nodes += node
-      for (input <- node.inputs) {
-        if( input != null ) {
-          if(!walked.contains(input)) {
-            if( input.component == null ) {
-              input.component = curComp
-            }
-            walked += input
-            dfsStack.push(input)
-          }
-        }
-      }
-    }
-
-    assert(dfsStack.isEmpty)
-  }
 
   def transform(c: Module, transforms: ArrayBuffer[(Module) => Unit]): Unit = {
     for (t <- transforms)
@@ -492,21 +445,6 @@ abstract class Backend {
     ChiselError.info("finished width checking")
     ChiselError.info("started flattenning")
     ChiselError.checkpoint()
-
-    /* *collectNodesIntoComp* associates components to nodes that were
-     created after the call tree has been executed (ie. in genMuxes
-     and forceMatchWidths).
-
-     The purpose of *collectNodesIntoComp* is to insure user-defined
-     transforms will be able to query a component for all its nodes
-     and a node for its component.
-
-     Technically all user-defined transforms are responsible to update
-     nodes and component correctly or call collectNodesIntoComp on return.
-     */
-    ChiselError.info("resolving nodes to the components")
-    collectNodesIntoComp(initializeDFS)
-    ChiselError.info("finished resolving")
 
     // two transforms added in Mem.scala (referenced and computePorts)
     ChiselError.info("started transforms")
