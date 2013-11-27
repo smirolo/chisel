@@ -73,11 +73,15 @@ class ListLookup(addrN: Node, default: List[Node],
 
   inferWidth = new WidthOf(1)
   inputs.append(addrN)
-  inputs ++ default
+  inputs ++= default
   map.map(x => { inputs.append(x._1); x._2.map(inputs.append(_)) })
 
   def addr: Node = inputs(0)
-  def wires: List[Node] = map.map(x => x._1).toList
+
+  def wires: List[Node] = {
+    consumers.filter(_.isInstanceOf[ListLookupRef]).toList
+  }
+
   def defaultWires: List[Node] = default
 }
 
@@ -87,7 +91,6 @@ class ListLookupRef(listN: Node, index: Int) extends Node {
   inferWidth = new WidthOf(1)
 
   inputs.append(listN)
-
-  def value: Node = inputs(0).inputs(index)
+  inputs.append(listN.inputs(1)) // for width inference
 }
 

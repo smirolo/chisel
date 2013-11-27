@@ -71,8 +71,8 @@ class VerifSuite extends AssertionsForJUnit {
       io.z := Cat(io.x, io.y)
     }
 
-    chiselMain(Array[String]("--backend", "c",
-      "--targetDir", tmpdir.getRoot().toString()),
+    chiselMain(Array[String]("--backend", "c"),
+//      "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new CppAssertComp()))
     assertFile(tmpdir.getRoot() + "/VerifSuite_CppAssertComp_1.cpp",
 """#include "VerifSuite_CppAssertComp_1.h"

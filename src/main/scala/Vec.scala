@@ -158,9 +158,20 @@ class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
   }
 
 
-  override def apply(idx: Int): T = {
-    self(idx)
+  override def apply(index: Int): T = {
+    println("XXX [Vec.apply] at " + index)
+    self(index)
   }
+
+  def apply(index: UInt): T = {
+    println("XXX [Vec.apply(Node)] at " + index)
+    self(0)
+/* XXX This should really be in the Mem
+ read(index)
+ */
+  }
+
+/* XXX
 
   def sortedElements: ArrayBuffer[ArrayBuffer[Data]] = {
     if (sortedElementsCache == null) {
@@ -181,25 +192,9 @@ class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
     }
     sortedElementsCache
   }
+ */
 
-  def apply(index: UInt): T = { self(0) } // XXX
-/* XXX This should really be in the Mem
-    = read(ind)
-
-  def write(addr: UInt, data: T) {
-    if(data.isInstanceOf[Node]){
-
-      val onehot = VecUIntToOH(addr, length)
-      Module.searchAndMap = true
-      for(i <- 0 until length){
-        when (getEnable(onehot, i)) {
-          this(i).comp procAssign data.toNode
-        }
-      }
-      Module.searchAndMap = false
-    }
-  }
-
+/*XXX
   def read(addr: UInt): T = {
     if(readPortCache.contains(addr)) {
       return readPortCache(addr)
@@ -219,6 +214,22 @@ class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
     }
     readPortCache += (addr -> res)
     res
+  }
+ */
+
+/*XXX
+  def write(addr: UInt, data: T) {
+    if(data.isInstanceOf[Node]){
+
+      val onehot = VecUIntToOH(addr, length)
+      Module.searchAndMap = true
+      for(i <- 0 until length){
+        when (getEnable(onehot, i)) {
+          this(i).comp procAssign data.toNode
+        }
+      }
+      Module.searchAndMap = false
+    }
   }
  */
 

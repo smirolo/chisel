@@ -70,8 +70,16 @@ class NoCircleGraphVisitor extends GraphVisitor {
 class AddConsumersVisitor extends GraphVisitor {
 
   override def start( node: Node ): Unit = {
+    if( node.component == null ) {
+      println("XXX [AddConsumersVisitor] node.component is null!")
+    } else {
+      if(!node.component.nodes.contains(node) ) node.component.nodes += node
+    }
     for ((i, off) <- node.inputs.zipWithIndex) {
       /* By construction we should not end-up with null inputs. */
+      if( i == null ) {
+        println("XXX [AddConsumersVisitor] node input is null!")
+      }
       assert(i != null, ChiselError.error("input " + off
         + " of " + node.inputs.length + " for node " + this + " is null"))
       if(!i.consumers.contains(node)) {

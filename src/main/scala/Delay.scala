@@ -169,14 +169,10 @@ class MemRead(mem: MemDelay, addr: Node) extends MemAccess(mem, addr) {
   */
 class MemSeqRead(mem: MemDelay, addri: Node) extends MemAccess(mem, addri) {
 
-  val addrReg = addri.asInstanceOf[RegDelay]
-
   override def cond: Node = {
-    val enable = addrReg.enable
+    val enable = addr.asInstanceOf[RegDelay].enable
     if( enable != null ) enable else Literal(1)
   }
-
-  override def addr = if(inputs.length > 2) inputs(2) else null
 
 /* XXX deprecated
   override def forceMatchingWidths = {

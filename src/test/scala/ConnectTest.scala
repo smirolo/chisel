@@ -505,7 +505,7 @@ endmodule
       () => Module(new InstanceSuperclass()))
     assertFile(tmpdir.getRoot() + "/ConnectSuite_InstanceSuperclass_1.v",
 """module ConnectSuite_A_3(
-    input  io_a_in,
+    input io_a_in,
     output io_a_out
 );
 
@@ -514,7 +514,7 @@ endmodule
 endmodule
 
 module ConnectSuite_InstanceSuperclass_1(
-    input  io_a_in,
+    input io_a_in,
     output io_a_out
 );
 
@@ -546,8 +546,8 @@ endmodule
         reg_status := new RegStatus().fromBits(io.wdata)
       }
     }
-    chiselMain(Array[String]("--v",
-      "--targetDir", tmpdir.getRoot().toString()),
+    chiselMain(Array[String]("--v"),
+ //     "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new A()))
     assertFile(tmpdir.getRoot() + "/ConnectSuite_A_4.v",
     """module ConnectSuite_A_4(input clk,

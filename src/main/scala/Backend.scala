@@ -91,6 +91,14 @@ abstract class Backend {
     if(x == 0) "" else "    " + genIndent(x-1);
   }
 
+  def findRoots(root: Module): Seq[Node] = {
+    var res = root.outputs()
+    for (comp <- root.children) {
+      res ++= findRoots(comp)
+    }
+    res
+  }
+
   def nameChildren(root: Module) {
     // Name all nodes at this level
     root.io.nameIt("io");
@@ -282,7 +290,6 @@ abstract class Backend {
     for ((name, i) <- inputs) {
       val node = i.node
       if (node.inputs.length == 0 && m != Module.topComponent) {
-        println("XXX [pruneUnconnectedIOs] " + node + " has " + node.consumers.length + " consumers")
         if (node.consumers.length > 0) {
           if (Module.warnInputs)
             ChiselError.warning({"UNCONNECTED INPUT " + emitRef(node) + " in COMPONENT " + node.component +
@@ -291,7 +298,6 @@ abstract class Backend {
         } else {
           if (Module.warnInputs)
             ChiselError.warning({"FLOATING INPUT " + emitRef(node) + " in COMPONENT " + node.component})
-          println("XXX [pruneUnconnectedIOs] prune=" + "FLOATING INPUT " + emitRef(node))
           node.prune = true
         }
       }
@@ -447,8 +453,9 @@ abstract class Backend {
     connectResets
  */
     ChiselError.info("started width inference")
-    val accessibleNodes = new ArrayBuffer[Node]
-    GraphWalker.tarjan(c.outputs(), {node => node.inferWidth.forward(node)})
+    GraphWalker.tarjan(findRoots(c), {node => node.inferWidth.forward(node)})
+    GraphWalker.tarjan(findRoots(c), {node => node.inferWidth.backward(node)})
+
     ChiselError.info("finished width inference")
     ChiselError.info("start width checking")
 //    c.forceMatchingWidths;
@@ -461,9 +468,7 @@ abstract class Backend {
     transform(c, transforms)
     ChiselError.info("finished transforms")
 
-    for( m <- sortedComps ) {
-      GraphWalker.depthFirst(m.outputs(), new AddConsumersVisitor)
-    }
+    GraphWalker.depthFirst(findRoots(c), new AddConsumersVisitor)
 
 /* XXX re-implement clockdomains.
     val clkDomainWalkedNodes = new ArrayBuffer[Node]
@@ -533,7 +538,7 @@ abstract class Backend {
   }
 
   def verifyAllMuxes(c: Module) {
-    GraphWalker.depthFirst(c.outputs(), new VerifyMuxes())
+    GraphWalker.depthFirst(findRoots(c), new VerifyMuxes())
   }
 
 }

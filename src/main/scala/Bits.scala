@@ -116,8 +116,11 @@ abstract class Bits extends Data {
   def lvalue(): Node = {
     node match {
       case memref: MemReference => {
-        val read = new MemRead(memref.mem, memref.addr)
-        memref.mem.ports.append(read)
+        val read = if( memref.addr.isInstanceOf[RegDelay] ) {
+          new MemSeqRead(memref.mem, memref.addr)
+        } else {
+          new MemRead(memref.mem, memref.addr)
+        }
         read
       }
       case iob: IOBound =>
@@ -145,7 +148,6 @@ abstract class Bits extends Data {
       case memref: MemReference =>
         val write = new MemWrite(memref.mem, memref.addr,
           value, Module.scope.genCond())
-        memref.mem.ports.append(write)
         write
       case regd: RegDelay =>
         if( regd.inputs.length > regd.CLOCK_NEXT ) {

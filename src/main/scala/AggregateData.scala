@@ -68,6 +68,10 @@ abstract class AggregateData[Key] extends Data {
     -1
   }
 
+  override def toBits(): UInt = {
+    Cat(this.flatten.map(x => x._2))
+  }
+
   override def toString: String = {
     var sep = ""
     val str = new StringBuilder

@@ -36,8 +36,23 @@ import scala.collection.mutable.HashSet
 
 class PrintNode extends GraphVisitor {
 
+ private def isDottable (m: Node): Boolean = {
+    if( m == null ) false
+    else if (m == m.component.defaultResetPin) {
+      false
+    } else {
+      m match {
+        case x: Literal  => false;
+        case _           => true;
+      }
+    }
+  }
+
   override def start( node: Node ): Unit = {
-    println(node)
+    println(node + " dot=" + isDottable(node))
+    for( m <- node.inputs ) {
+      println("\tdot=" + isDottable(m))
+    }
   }
 
 }
@@ -53,7 +68,7 @@ class DotBackend extends Backend {
 
   private def isDottable (m: Node): Boolean = {
     if( m == null ) false
-    else if (m == m.component.defaultResetPin) {
+    else if (m.component != null && m == m.component.defaultResetPin) {
       false
     } else {
       m match {
@@ -92,7 +107,7 @@ class DotBackend extends Backend {
       res.append(indent)
       res.append(innercrossings)
     }
-    for (m <- top.mods) {
+    for (m <- top.nodes) {
       if (isDottable(m)) {
 //        if( m.component == top ) {
           /* We have to check the node's component agrees because output
@@ -119,7 +134,7 @@ class DotBackend extends Backend {
  //       }
       }
     }
-    for (m <- top.mods) {
+    for (m <- top.nodes) {
  //     if( m.component == top ) {
         /* We have to check the node's component agrees because output
          nodes are part of a component *mods* as well as its parent *mods*! */
@@ -167,6 +182,13 @@ class DotBackend extends Backend {
             for ((cn, cd) <- b.elements)
               dumpIo(cn, cd);
             out_cd.write("}\n");
+          case v: Vec[_] =>
+            out_cd.write("subgraph cluster" + n + "__" + genNum + "{\n");
+            out_cd.write("node [shape=box];\n");
+            out_cd.write("label = \"" + n + "\";\n");
+            for ((cn, cd) <- v.items())
+              dumpIo(cn.toString, cd);
+            out_cd.write("}\n");
           case bits: Bits =>
             out_cd.write(emitRef(bits.node) + "[label=\"" + n + "\"];\n");
             for (in <- bits.node.inputs)
@@ -196,6 +218,6 @@ class DotBackend extends Backend {
     out_d.close();
 
     println("XXX All Reachable Nodes:")
-    GraphWalker.depthFirst(c.outputs(), new PrintNode)
+    GraphWalker.depthFirst(findRoots(c), new PrintNode)
   }
 }

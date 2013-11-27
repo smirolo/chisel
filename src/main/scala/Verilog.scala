@@ -315,21 +315,18 @@ class VerilogBackend extends Backend {
           + emitRef(x.inputs(0)) + "{" + x.n + "}};\n");
 
       case ll: ListLookupRef => {
-        println("XXX [Verilog::ListLookupRef] " + ll)
         ""
       }
 
       case ll: ListLookup => {
-        println("XXX [Verilog::ListLookup] " + ll.inputs.size)
         val res = new StringBuilder()
         res.append("  always @(*) begin\n" +
                    //"    " + emitRef + " = " + inputs(1).emitRef + ";\n" +
                    "    casez (" + emitRef(ll.addr) + ")" + "\n");
-
         for ((addr, data) <- ll.map) {
           res.append("      " + emitRef(addr) + " : begin\n");
           for ((w, e) <- ll.wires zip data) {
-            if(w.component != null && w.component.mods.contains(w) ) {
+            if(w.component != null && w.component.nodes.contains(w) ) {
               res.append("        " + emitRef(w) + " = " + emitRef(e) + ";\n");
             }
           }
@@ -337,7 +334,7 @@ class VerilogBackend extends Backend {
         }
         res.append("      default: begin\n")
         for ((w, e) <- ll.wires zip ll.defaultWires) {
-          if(w.component != null && w.component.mods.contains(w)) {
+          if(w.component != null && w.component.nodes.contains(w)) {
             res.append("        " + emitRef(w) + " = " + emitRef(e) + ";\n");
           }
         }
@@ -597,7 +594,7 @@ class VerilogBackend extends Backend {
 
   def emitDefs(c: Module): StringBuilder = {
     val res = new StringBuilder()
-    for (m <- c.mods) {
+    for (m <- c.nodes) {
       res.append(emitDef(m))
     }
     for (c <- c.children) {
@@ -614,7 +611,7 @@ class VerilogBackend extends Backend {
       sb.append("  always @(posedge " + emitRef(clock) + ") begin\n")
       clkDomains += (clock -> sb)
     }
-    for (m <- c.mods) {
+    for (m <- c.nodes) {
       if( m.isInstanceOf[Delay] || m.isInstanceOf[MemWrite] ) {
         val clock = (if( m.isInstanceOf[Delay] ) m.asInstanceOf[Delay].clock
         else m.asInstanceOf[MemWrite].mem.clock)
@@ -692,7 +689,7 @@ class VerilogBackend extends Backend {
 
   def emitDecs(c: Module): StringBuilder = {
     val res = new StringBuilder();
-    for (m <- c.mods -- c.io.flatten.map(x => x._2.node)) {
+    for (m <- c.nodes -- c.io.flatten.map(x => x._2.node)) {
       res.append(emitDec(m))
     }
     res
@@ -730,7 +727,7 @@ class VerilogBackend extends Backend {
     res.append(ports.map(_.result).reduceLeft(_ + "\n" + _))
     res.append("\n);\n\n");
     // TODO: NOT SURE EXACTLY WHY I NEED TO PRECOMPUTE TMPS HERE
-    for (m <- c.mods)
+    for (m <- c.nodes)
       emitTmp(m);
     res.append(emitDecs(c));
     res.append("\n");
@@ -807,7 +804,6 @@ class VerilogBackend extends Backend {
         + " (" + c.level + "," + c.traversal + ")");
       ChiselError.checkpoint()
 
-      c.collectNodes(c);
       if( c.level > level ) {
         /* When a component instance instantiates different sets
          of sub-components based on its constructor parameters, the same

@@ -132,14 +132,13 @@ class FloBackend extends Backend {
 
     for (cc <- Module.components) {
       if (!(cc == c)) {
-        c.mods       ++= cc.mods;
+        c.nodes       ++= cc.nodes;
         c.debugs     ++= cc.debugs;
       }
     }
     verifyAllMuxes(c)
     ChiselError.checkpoint()
 
-    c.collectNodes(c);
     c.findOrdering(); // search from roots  -- create omods
     renameNodes(c, c.omods);
     if (Module.isReportDims) {

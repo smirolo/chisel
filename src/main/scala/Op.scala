@@ -37,6 +37,11 @@ abstract class Op extends Node {
   val opInfix = "und"
 }
 
+/** Marks operations whose inputs width need to match in sizes.
+  */
+trait SymetricOpand {
+}
+
 
 /** Base class for nodes that appear as unary operators in the generated graph.
   */
@@ -124,7 +129,8 @@ class RightShiftSOp(left: Node, right: Node)
 }
 
 
-class AddOp(left: Node, right: Node) extends BinaryOp(left, right) {
+class AddOp(left: Node, right: Node) extends BinaryOp(left, right)
+    with SymetricOpand {
 
   inferWidth = new maxWidth()
 
@@ -133,7 +139,8 @@ class AddOp(left: Node, right: Node) extends BinaryOp(left, right) {
 }
 
 
-class AndOp(left: Node, right: Node) extends BinaryOp(left, right) {
+class AndOp(left: Node, right: Node) extends BinaryOp(left, right)
+    with SymetricOpand {
 
   inferWidth = new maxWidth()
 
@@ -156,7 +163,7 @@ class ExtractOp(opand: Node, hiBit: Node, loBit: Node) extends Op {
   override def slug = "extract"
 
   override def toString: String =
-    (inputs(0) + "(" +  (if (hi == lo) "" else (", " + hi)) + ", " + lo + ")")
+    (inputs(0) + "(" + hi + (if (hi == lo) "" else (", " + hi)) + ")")
 }
 
 
@@ -286,7 +293,8 @@ class RemUSOp(left: Node, right: Node) extends RemOp(left, right) {
 }
 
 
-class OrOp(left: Node, right: Node) extends BinaryOp(left, right) {
+class OrOp(left: Node, right: Node) extends BinaryOp(left, right)
+    with SymetricOpand {
 
   inferWidth = new maxWidth()
 
@@ -297,7 +305,8 @@ class OrOp(left: Node, right: Node) extends BinaryOp(left, right) {
 
 /** Substraction operator
   */
-class SubOp(left: Node, right: Node) extends BinaryOp(left, right) {
+class SubOp(left: Node, right: Node) extends BinaryOp(left, right)
+    with SymetricOpand {
 
   inferWidth = new maxWidth()
 
@@ -306,7 +315,8 @@ class SubOp(left: Node, right: Node) extends BinaryOp(left, right) {
 }
 
 
-class XorOp(left: Node, right: Node) extends BinaryOp(left, right) {
+class XorOp(left: Node, right: Node) extends BinaryOp(left, right)
+    with SymetricOpand {
 
   inferWidth = new maxWidth()
 
@@ -326,7 +336,8 @@ class CatOp(left: Node, right: Node) extends BinaryOp(left, right) {
 }
 
 
-class LogicalOp(left: Node, right: Node) extends BinaryOp(left, right) {
+class LogicalOp(left: Node, right: Node) extends BinaryOp(left, right)
+    with SymetricOpand {
 
   inferWidth = new maxToFixedWidth(1)
 }

@@ -36,37 +36,6 @@ import scala.reflect._
 
 object Reg {
 
-/* XXX
-  def regMaxWidth(m: Node) =
-    if (isInGetWidth) {
-      throw new Exception("getWidth was called on a Register or on an object connected in some way to a Register that has a statically uninferrable width")
-    } else {
-      maxWidth(m)
-    }
-
-  // Rule: If no width is specified, use max width. Otherwise, use the specified width.
-  def regWidth(w: Int) =
-    if(w <= 0) {
-      regMaxWidth _ ;
-    } else {
-      fixWidth(w)
-    }
- */
-  /** Rule: if r is using an inferred width, then don't enforce a width. If it is using a user inferred
-    width, set the the width
-
-    XXX Can't specify return type. There is a conflict. It is either
-    (Node) => (Int) or Int depending which execution path you believe.
-    
-  def regWidth(r: Node) = {
-    val rLit = r.litOf
-    if (rLit != null && rLit.hasInferredWidth) {
-      regMaxWidth _
-    } else {
-      fixWidth(r.getWidth)
-    }
-  }
-*/
   def validateGen[T <: Data](gen: => T) {
 //XXX        throwException("Invalid Type Specifier for Reg")
   }
@@ -107,9 +76,9 @@ object Reg {
           {ChiselError.error("Negative width to wire " + res_i)})
         val reg = new RegDelay(
           clock.node.asInstanceOf[Update],
-          if( data_i != null ) data_i.node else null,
-          if( rval_i != null ) rval_i.node else null,
-          reset.node)
+          if( data_i != null ) data_i.lvalue() else null,
+          if( rval_i != null ) rval_i.lvalue() else null,
+          reset.lvalue())
         reg.inferWidth = mType.toBits.node.inferWidth
         res_i.node = reg
       }
@@ -117,9 +86,9 @@ object Reg {
       for(((res_n, res_i), (data_n, data_i)) <- res.flatten zip d) {
         val reg = new RegDelay(
           clock.node.asInstanceOf[Update],
-          if( data_i != null ) data_i.node else null,
+          if( data_i != null ) data_i.lvalue() else null,
           null,
-          reset.node)
+          reset.lvalue())
         reg.inferWidth = mType.toBits.node.inferWidth
         res_i.node = reg
       }

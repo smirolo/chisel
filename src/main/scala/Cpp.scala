@@ -818,13 +818,12 @@ class CppBackend extends Backend {
     for (cc <- Module.components) {
       if (!(cc == c)) {
         c.debugs ++= cc.debugs
-        c.mods       ++= cc.mods;
+        c.nodes       ++= cc.nodes;
       }
     }
     verifyAllMuxes(c)
     ChiselError.checkpoint()
 
-    c.collectNodes(c);
     c.findOrdering(); // search from roots  -- create omods
     renameNodes(c, c.omods);
     if (Module.isReportDims) {

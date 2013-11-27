@@ -106,12 +106,10 @@ class NameSuite extends AssertionsForJUnit {
     output io_sigs_valid
 );
 
+  reg valid;
   wire T0;
-  reg[0:0] valid;
-  wire T1;
 
-  assign io_sigs_valid = T0;
-  assign T0 = valid;
+  assign io_sigs_valid = valid;
   always @(*) begin
     casez (io_inst)
       32'b00000000000000000010011101111011/* 0*/ : begin
@@ -257,23 +255,21 @@ endmodule
       () => Module(new BindSecondComp(true)))
    assertFile(tmpdir.getRoot() + "/NameSuite_BindSecondComp_1.v",
 """module NameSuite_Block_1(
-    input  io_irq,
-    output[4:0] io_irq_cause
+    input io_irq,
+    output [4:0] io_irq_cause
 );
 
-  wire[4:0] T0;
 
-  assign io_irq_cause = T0;
-  assign T0 = {3'h0/* 0*/, 2'h2/* 2*/};
+  assign io_irq_cause = 5'h2/* 2*/;
 endmodule
 
 module NameSuite_BindSecondComp_1(
-    input  io_irq,
-    output[5:0] io_irq_cause
+    input io_irq,
+    output [5:0] io_irq_cause
 );
 
-  wire[5:0] T0;
-  wire[4:0] NameSuite_Block_1_io_irq_cause;
+  wire [5:0] T0;
+  wire [4:0] NameSuite_Block_1_io_irq_cause;
 
   assign io_irq_cause = T0;
   assign T0 = {1'h1/* 1*/, NameSuite_Block_1_io_irq_cause};
@@ -349,12 +345,12 @@ module NameSuite_BindThirdComp_1(
     output io_result
 );
 
-  wire T0;
-  wire T1;
-  wire T2;
   wire NameSuite_Comp_1_0_io_out_ren;
   wire NameSuite_Comp_1_1_io_out_ren;
   wire NameSuite_Comp_1_2_io_out_ren;
+  wire T0;
+  wire T1;
+  wire T2;
   wire NameSuite_Comp_1_3_io_out_ren;
 
   assign io_result = T0;
@@ -774,6 +770,8 @@ endmodule
   /** Generated names for memories which are actual modules (ie. not inlined).
     */
   @Test def testMemComp() {
+    println("\nRunning testMemComp:")
+
     val SZ_BREGLEN = 8
     val SZ_DATA = 65
 

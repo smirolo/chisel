@@ -49,7 +49,12 @@ object Cat {
 
   def apply[T <: Data](seq: Seq[T]): UInt = {
     val modsList = seq.filter(_ != null).toList
-    modsList.tail.foldLeft(modsList.head.toBits){ (a, b) => a.toBits ## b.toBits }
+    if( modsList.length > 1 ) {
+      modsList.tail.foldLeft(modsList.head.toBits){
+        (a, b) => a.toBits ## b.toBits }
+    } else {
+      modsList.head.toBits
+    }
   }
 }
 
