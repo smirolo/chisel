@@ -36,63 +36,75 @@ import scala.reflect._
 
 object Reg {
 
-  def validateGen[T <: Data](gen: => T) {
-//XXX        throwException("Invalid Type Specifier for Reg")
-  }
-
   /** *type_out* defines the data type of the register when it is read.
     *update* and *reset* define the update and reset values
     respectively.
     */
   def apply[T <: Data](outType: T = null, next: T = null, init: T = null,
     clock: Clock = Module.scope.clock, reset: Bool = Module.scope.reset): T = {
-    var mType = outType
-    if(mType == null) {
-      mType = next
+    val res: T = if( outType != null ) outType.clone
+    else if( next != null ) next.clone
+    else if( init != null ) init.clone
+    else null.asInstanceOf[T]
+    if( res == null ) {
+      ChiselError.error("Cannot infer type of Reg")
     }
-    if(mType == null) {
-      mType = init
-    }
-    if(mType == null) {
-      throw new Exception("cannot infer type of Reg.")
-    }
-
-    val gen = mType.clone
-    validateGen(gen)
-
-    val d: Array[(String, Bits)] =
-      if(next == null) {
-        gen.flatten.map{case(x, y) => (x -> null)}
+    if( next != null ) {
+      if( init != null ) {
+        for((((resIdx, resB), (dataIdx, nextB)), (rvalIdx, initB))
+          <- res.flatten zip next.flatten zip init.flatten) {
+          val reg = new RegDelay(
+            clock.node.asInstanceOf[Update],
+            nextB.lvalue(),
+            initB.lvalue(),
+            reset.lvalue())
+          resB.node = reg
+        }
       } else {
-        next.flatten
-      }
-
-    // asOutput flip the direction and returns this.
-    val res = gen.asOutput
-    if(init != null) {
-      for((((res_n, res_i), (data_n, data_i)), (rval_n, rval_i))
-        <- res.flatten zip d zip init.flatten) {
-        assert(rval_i.getWidth > 0,
-          {ChiselError.error("Negative width to wire " + res_i)})
-        val reg = new RegDelay(
-          clock.node.asInstanceOf[Update],
-          if( data_i != null ) data_i.lvalue() else null,
-          if( rval_i != null ) rval_i.lvalue() else null,
-          reset.lvalue())
-        reg.inferWidth = mType.toBits.node.inferWidth
-        res_i.node = reg
+        for(((resIdx, resB), (dataIdx, nextB))
+          <- res.flatten zip next.flatten) {
+          val reg = new RegDelay(
+            clock.node.asInstanceOf[Update],
+            nextB.lvalue(),
+            null,
+            reset.lvalue())
+          resB.node = reg
+        }
       }
     } else {
-      for(((res_n, res_i), (data_n, data_i)) <- res.flatten zip d) {
-        val reg = new RegDelay(
-          clock.node.asInstanceOf[Update],
-          if( data_i != null ) data_i.lvalue() else null,
-          null,
-          reset.lvalue())
-        reg.inferWidth = mType.toBits.node.inferWidth
-        res_i.node = reg
+      /* next is null */
+      if( init != null ) {
+        for(((resIdx, resB), (rvalIdx, initB))
+          <- res.flatten zip init.flatten) {
+          val reg = new RegDelay(
+            clock.node.asInstanceOf[Update],
+            null,
+            initB.lvalue(),
+            reset.lvalue())
+          resB.node = reg
+        }
+      } else {
+        /* both next and init are null */
+        for((resIdx, resB) <- res.flatten) {
+          val reg = new RegDelay(
+            clock.node.asInstanceOf[Update],
+            null,
+            null,
+            reset.lvalue())
+          resB.node = reg
+        }
       }
     }
+
+    /* override width inference if it was explicitely specified. */
+    if( outType != null ) {
+      for(((resIdx, resB), (outIdx, outN)) <- res.flatten zip outType.flatten) {
+        if( outN.node.inferWidth.isInstanceOf[FixedWidth] ) {
+          resB.node.inferWidth = outN.node.inferWidth
+        }
+      }
+    }
+
     res
   }
 

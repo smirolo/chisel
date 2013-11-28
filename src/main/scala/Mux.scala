@@ -95,31 +95,33 @@ object Mux {
       } else {
         new MuxOp(t.lvalue(), c.toBits.lvalue(), a.toBits.lvalue())
       }
+    /* XXX Cannot use classTag on Bundle/Vec until we solve
+     the cloning issue. Passed that there is also the type erasure
+     issue when executing a VecMux from a VecReference.
     val result = m.runtimeClass.newInstance.asInstanceOf[T]
+     */
+    val result = a.clone
     result.fromBits(UInt(op))
     result
   }
 }
 
 
+/** Generate a mux tree that returns the item in *elts* at position *addr*.
+  */
+object VecMux {
 
-object isLessThan {
-
-  def distFromData(x: java.lang.Class[_]): Int = {
-    var xClass = x
-    var xCnt = 0
-    while(xClass.toString != "class Chisel.Data") {
-      xClass = xClass.getSuperclass
-      xCnt += 1
+  def apply(addr: UInt, elts: Seq[Data]): Data = {
+    def doit(elts: Seq[Data], pos: Int): Data = {
+      if (elts.length == 1) {
+        elts(0)
+      } else {
+        val newElts = (0 until elts.length/2).map(i => Mux(addr(pos), elts(2*i + 1), elts(2*i)))
+        doit(newElts ++ elts.slice(elts.length/2*2, elts.length), pos + 1)
+      }
     }
-    xCnt
-  }
-
-  def checkCommonSuperclass(x: java.lang.Class[_], y: java.lang.Class[_]) {
-  }
-
-  def apply(x: java.lang.Class[_], y: java.lang.Class[_]): Boolean = {
-    checkCommonSuperclass(x, y)
-    distFromData(x) > distFromData(y)
+    doit(elts, 0)
   }
 }
+
+

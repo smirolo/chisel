@@ -36,7 +36,7 @@ object SInt {
   def apply(x: Int): SInt = SInt(Literal(x))
   def apply(x: Int, width: Int): SInt = SInt(Literal(x, width))
 
-  def apply(dir: IODirection = null, width: Int = -1): SInt = {
+  def apply(dir: IODirection = NODIRECTION, width: Int = -1): SInt = {
     val res = new SInt()
     res.node = new IOBound(dir, width)
     res
@@ -52,22 +52,6 @@ object SInt {
 class SInt extends Bits {
 
   type T = SInt;
-
-/* XXX deprecated
-  override def matchWidth(w: Int): Node = {
-    if (w > this.width) {
-      val topBit = Extract(this, this.width-1); topBit.infer
-      val fill = NodeFill(w - this.width, topBit); fill.infer
-      val res = CatOp(fill, this); res.infer
-      res
-    } else if (w < this.width) {
-      val res = Extract(this, w-1,0); res.infer
-      res
-    } else {
-      this
-    }
-  }
- */
 
   /** casting from UInt followed by assignment. */
   override def :=(src: Data): Unit = {

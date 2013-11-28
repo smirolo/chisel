@@ -85,14 +85,6 @@ class IOBound(var dir: IODirection = NODIRECTION,
     this
   }
 
-/* XXX deprecated
-  def bind( target: IOBound ): this.type = {
-    inputs.clear()
-    inputs.append(target)
-    this
-  }
- */
-
   override def flip(): this.type = {
     if (dir == INPUT) {
       dir = OUTPUT
@@ -108,5 +100,8 @@ class IOBound(var dir: IODirection = NODIRECTION,
 
   def target: Node = if( inputs.length > 0 ) inputs(0) else null
 
-  override def slug: String = dir.toString + "[" + width + "]"
+  override def slug: String = {
+    assert( dir != null )
+    dir.toString + "[" + width + "]"
+  }
 }

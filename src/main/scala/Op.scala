@@ -149,12 +149,15 @@ class AndOp(left: Node, right: Node) extends BinaryOp(left, right)
 }
 
 
-class ExtractOp(opand: Node, hiBit: Node, loBit: Node) extends Op {
+class ExtractOp(opandN: Node, hiBit: Node, loBit: Node) extends Op {
 
-  inferWidth = new WidthOf(0)
-  this.inputs.append(opand)
+  this.inputs.append(opandN)
   this.inputs.append(hiBit)
   this.inputs.append(loBit)
+
+  inferWidth = if( hi.isInstanceOf[Literal] && lo.isInstanceOf[Literal] ) new FixedWidth(hi.asInstanceOf[Literal].value.toInt - lo.asInstanceOf[Literal].value.toInt + 1) else new WidthOf(0)
+
+  def opand: Node = this.inputs(0)
 
   def hi: Node = this.inputs(1)
 

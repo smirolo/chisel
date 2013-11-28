@@ -273,6 +273,7 @@ class Literal extends Node {
   def minNum: BigInt = value;
   override def clearlyEquals(x: Node) = x.isInstanceOf[Literal] && value == x.asInstanceOf[Literal].value
   override def toString: String = name;
+
   override def isInVCD: Boolean = false
 
   def d (x: BigInt): Literal = Literal(x, value.toInt)

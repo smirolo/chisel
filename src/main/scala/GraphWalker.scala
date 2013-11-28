@@ -56,7 +56,10 @@ class ByClassVisitor[T <: Node](implicit m: Manifest[T]) extends GraphVisitor {
   val items = new ArrayBuffer[T]()
 
   override def start( node: Node ): Unit = {
-    if( m.erasure.isInstance(node) ) items += node.asInstanceOf[T]
+    if( m.erasure.isInstance(node)
+      && !items.contains(node) ) {
+      items += node.asInstanceOf[T]
+    }
   }
 }
 
@@ -70,16 +73,10 @@ class NoCircleGraphVisitor extends GraphVisitor {
 class AddConsumersVisitor extends GraphVisitor {
 
   override def start( node: Node ): Unit = {
-    if( node.component == null ) {
-      println("XXX [AddConsumersVisitor] node.component is null!")
-    } else {
-      if(!node.component.nodes.contains(node) ) node.component.nodes += node
-    }
+    if(node.component != null
+      && !node.component.nodes.contains(node) ) node.component.nodes += node
     for ((i, off) <- node.inputs.zipWithIndex) {
       /* By construction we should not end-up with null inputs. */
-      if( i == null ) {
-        println("XXX [AddConsumersVisitor] node input is null!")
-      }
       assert(i != null, ChiselError.error("input " + off
         + " of " + node.inputs.length + " for node " + this + " is null"))
       if(!i.consumers.contains(node)) {
@@ -90,23 +87,33 @@ class AddConsumersVisitor extends GraphVisitor {
 
 }
 
-object GraphWalker {
+class EdgeFilter {
 
-  def exceptEdge[T <: Node, U <: Node](source: Node, target: Node)(implicit m1: Manifest[T], m2: Manifest[U]): Boolean = {
-    !m1.erasure.isInstance(source) || (target != null && !m2.erasure.isInstance(target))
-  }
-
-  def anyEdge(source: Node, target: Node): Boolean = {
+  def apply( source: Node, target: Node ): Boolean = {
     /* Assignments are using Muxes with dangling pointers
      to construct a tree rooted with a default value. */
     target != null
   }
 
+}
+
+class ExceptEdge[T <: Node, U <: Node](implicit m1: Manifest[T], m2: Manifest[U]) extends EdgeFilter {
+
+  override def apply( source: Node, target: Node ): Boolean = {
+    !m1.erasure.isInstance(source) || (target != null && !m2.erasure.isInstance(target))
+  }
+
+}
+
+object GraphWalker {
+
+  val anyEdge = new EdgeFilter
+
   /** Breath first traversal from a set of *roots*. The *visitor* will
     be applied to all vertices after the subtree rooted at it was traversed.
     */
   def breadthFirst(roots: Seq[Node], visitor: GraphVisitor,
-    edgeFilter: (Node, Node) => Boolean = anyEdge ) {
+    edgeFilter: EdgeFilter = anyEdge ) {
     val queue = new scala.collection.mutable.Queue[Node]
     val visited = new HashSet[Node]
 
@@ -118,7 +125,7 @@ object GraphWalker {
       val top = queue.dequeue
       visited += top
       visitor.start(top)
-      for( inp <- top.inputs ) {
+      for( inp <- top.inputs.filter(_ != null) ) {
         if( edgeFilter(top, inp) ) {
           if( !visited.contains(inp) ) {
             queue.dequeueFirst(_ == inp)
@@ -138,17 +145,17 @@ object GraphWalker {
     be applied to all vertices after the subtree rooted at it was traversed.
     */
   def depthFirst(roots: Seq[Node], visitor: GraphVisitor,
-    edgeFilter: (Node, Node) => Boolean = anyEdge ) {
+    edgeFilter: EdgeFilter = anyEdge ) {
 
     val grey = 1
     val black = 2
     val color = new HashMap[Node, Int]
 
     def recursiveDepthFirst(root: Node, visitor: GraphVisitor,
-      edgeFilter: (Node, Node) => Boolean = anyEdge ) {
+      edgeFilter: EdgeFilter = anyEdge ) {
       visitor.start(root)
       color.put(root, grey)
-      for( inp <- root.inputs ) {
+      for( inp <- root.inputs.filter(_ != null) ) {
         if( edgeFilter(root, inp) ) {
           if( !color.contains(inp) ) {
             // unexplored "white" edge
@@ -180,8 +187,8 @@ object GraphWalker {
     On return nodes will be partitionned into strongly connected components.
     The SCC a ``Node`` belongs to can be queried through its sccId field.
     */
-  def tarjan(nodes: Seq[Node], visitor: (Node) => Unit,
-    edgeFilter: (Node, Node) => Boolean = anyEdge ) {
+  def tarjan(nodes: Seq[Node], visitor: GraphVisitor,
+    edgeFilter: EdgeFilter = anyEdge ) {
     var sccId = 0
     var sccIndex = 0
     val stack = new Stack[Node]
@@ -189,12 +196,13 @@ object GraphWalker {
     val lowlink = new HashMap[Node, Int]
 
     def tarjanSCC(node: Node) {
+      assert( node != null )
       sccIndex += 1
       index.put(node, sccIndex)
       lowlink.put(node, sccIndex)
       stack.push(node)
 
-      for( inp <- node.inputs ) {
+      for( inp <- node.inputs.filter(_ != null) ) {
         if( edgeFilter(node, inp) ) {
           if( !index.contains(inp) ) {
             // Successor has not yet been visited.
@@ -214,7 +222,7 @@ object GraphWalker {
           top = stack.pop()
           top.sccId = sccId
 //          println("XXX [tarjan:" + sccId + "] visit " + top)
-          visitor(top)
+          visitor.start(top)
         } while( !(node == top) )
       }
     }

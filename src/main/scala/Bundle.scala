@@ -140,7 +140,12 @@ class Bundle extends AggregateData[String] {
   }
 
   override def fromBits( bits: Bits ): this.type = {
-    // XXX implement correctly
+    var ind = 0;
+    for( (name, elem) <- this.flatten.toList.reverse ) {
+      val width = elem.node.width
+      elem := (if( width > 1) bits(ind + width - 1, ind) else bits(ind))
+      ind += width
+    }
     this
   }
 

@@ -345,12 +345,12 @@ module NameSuite_BindThirdComp_1(
     output io_result
 );
 
-  wire NameSuite_Comp_1_0_io_out_ren;
-  wire NameSuite_Comp_1_1_io_out_ren;
-  wire NameSuite_Comp_1_2_io_out_ren;
   wire T0;
   wire T1;
   wire T2;
+  wire NameSuite_Comp_1_0_io_out_ren;
+  wire NameSuite_Comp_1_1_io_out_ren;
+  wire NameSuite_Comp_1_2_io_out_ren;
   wire NameSuite_Comp_1_3_io_out_ren;
 
   assign io_result = T0;
@@ -420,9 +420,7 @@ endmodule
    of a subcomponent.
    */
   @Test def testBindFith() {
-
     println("\nRunning testBindFith:")
-
     class UnamedBundle extends Bundle {
       val error = Bool()
       val ppn = UInt(width = 32)
@@ -468,56 +466,62 @@ endmodule
       () => Module(new BindFithComp))
     assertFile(tmpdir.getRoot() + "/NameSuite_BindFithComp_1.v",
 """module NameSuite_Block_2(input clk,
-    input  io_valid,
-    output[31:0] io_mine_0,
-    output[31:0] io_mine_1,
-    //input  io_sub_resp_valid
-    //input  io_sub_resp_bits_error
+    input io_valid,
+    output [31:0] io_mine_0,
+    output [31:0] io_mine_1,
+    //input io_sub_resp_valid
+    //input io_sub_resp_bits_error
     input [31:0] io_sub_resp_bits_ppn
 );
 
-  wire[31:0] T0;
+  wire [31:0] T0;
   wire T1;
-  wire[31:0] T2;
-  reg[31:0] tag_ram_1;
-  reg[31:0] tag_ram_0;
-  wire[31:0] T3;
-  wire T4;
+  wire [31:0] T2;
+  reg [31:0] tag_ram_0;
+  wire [31:0] T3;
+  wire [31:0] T4;
+  reg [31:0] tag_ram_1;
+  wire [31:0] T5;
+  wire [31:0] T6;
+  wire T7;
 
-  assign io_mine_1 = T0;
+  assign io_mine_0 = T0;
   assign T0 = {31'h0/* 0*/, T1};
-  assign T1 = T2[1'h1/* 1*/:1'h1/* 1*/];
+  assign T1 = T2[1'h0/* 0*/:1'h0/* 0*/];
   assign T2 = io_valid ? tag_ram_0 : tag_ram_1;
-  assign io_mine_0 = T3;
-  assign T3 = {31'h0/* 0*/, T4};
-  assign T4 = T2[1'h0/* 0*/:1'h0/* 0*/];
+  assign T3 = T4;
+  assign T4 = io_sub_resp_bits_ppn;
+  assign T5 = T4;
+  assign io_mine_1 = T6;
+  assign T6 = {31'h0/* 0*/, T7};
+  assign T7 = T2[1'h1/* 1*/:1'h1/* 1*/];
 
   always @(posedge clk) begin
-    if(1'h0/* 0*/) begin
-      tag_ram_1 <= io_sub_resp_bits_ppn;
+    if(T8) begin
+      tag_ram_0 <= T3;
     end
-    if(io_valid) begin
-      tag_ram_0 <= io_sub_resp_bits_ppn;
+    if(T9) begin
+      tag_ram_1 <= T5;
     end
   end
 endmodule
 
 module NameSuite_BindFithComp_1(input clk,
-    input  io_imem_ptw_resp_valid,
-    input  io_imem_ptw_resp_bits_error,
+    input io_imem_ptw_resp_valid,
+    input io_imem_ptw_resp_bits_error,
     input [31:0] io_imem_ptw_resp_bits_ppn,
-    input  io_dmem_ptw_resp_valid,
-    input  io_dmem_ptw_resp_bits_error,
+    input io_dmem_ptw_resp_valid,
+    input io_dmem_ptw_resp_bits_error,
     input [31:0] io_dmem_ptw_resp_bits_ppn,
     output io_resp_resp_valid,
     output io_resp_resp_bits_error,
-    output[31:0] io_resp_resp_bits_ppn
+    output [31:0] io_resp_resp_bits_ppn
 );
 
 
-  assign io_resp_resp_bits_ppn = io_imem_ptw_resp_bits_ppn;
-  assign io_resp_resp_bits_error = io_imem_ptw_resp_bits_error;
   assign io_resp_resp_valid = io_imem_ptw_resp_valid;
+  assign io_resp_resp_bits_error = io_imem_ptw_resp_bits_error;
+  assign io_resp_resp_bits_ppn = io_imem_ptw_resp_bits_ppn;
   NameSuite_Block_2 NameSuite_Block_2(.clk(clk),
        //.io_valid(  )
        //.io_mine_0(  )
@@ -574,33 +578,31 @@ endmodule
       () => Module(new VecComp()))
     assertFile(tmpdir.getRoot() + "/NameSuite_VecComp_1.v",
 """module NameSuite_VecComp_1(input clk,
-    input  io_r_en,
+    input io_r_en,
     input [4:0] io_r_addr,
     input [63:0] io_w_data,
-    output[7:0] io_status_im
+    output [7:0] io_status_im
 );
 
-  reg[7:0] reg_status_im;
-  wire[7:0] T0;
-  wire[63:0] wdata;
-  reg[63:0] host_pcr_bits_data;
-  wire[63:0] T1;
-  wire[7:0] rdata;
-  wire[7:0] elts_0;
-  wire[7:0] T2;
+  reg [7:0] reg_status_im;
+  wire [7:0] T0;
+  wire [7:0] T1;
+  wire [63:0] wdata;
+  reg [63:0] host_pcr_bits_data;
+  wire [7:0] T2;
+  wire [7:0] rdata;
 
   assign io_status_im = reg_status_im;
-  assign T0 = wdata[3'h7/* 7*/:1'h0/* 0*/];
+  assign T0 = T1;
+  assign T1 = wdata[3'h7/* 7*/:1'h0/* 0*/];
   assign wdata = io_r_en ? io_w_data : host_pcr_bits_data;
-  assign T1 = {56'h0/* 0*/, rdata};
-  assign rdata = elts_0;
-  assign elts_0 = T2;
-  assign T2 = {reg_status_im};
+  assign T2 = rdata;
+  assign rdata = reg_status_im;
 
   always @(posedge clk) begin
     reg_status_im <= T0;
     if(io_r_en) begin
-      host_pcr_bits_data <= T1;
+      host_pcr_bits_data <= T2;
     end
   end
 endmodule
@@ -790,31 +792,33 @@ endmodule
       io.rdata := rfile(raddr)
     }
 
-    chiselMain(Array[String]("--v", "--noInlineMem",
+    chiselMain(Array[String]("--noInlineMem", "--v",
       "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new MemComp()))
     assertFile(tmpdir.getRoot() + "/NameSuite_MemComp_1.v",
 """module NameSuite_MemComp_1(input clk, input reset,
-    input  io_ren,
+    input io_ren,
     input [7:0] io_raddr,
-    output[64:0] io_rdata
+    output [64:0] io_rdata
 );
 
-  wire[64:0] T0;
-  reg[7:0] raddr;
+  wire [64:0] T0;
+  reg [7:0] raddr;
+  wire [7:0] T1;
 
   assign io_rdata = T0;
   NameSuite_MemComp_1_rfile rfile (
     .CLK(clk),
     .RST(reset),
-    .R0A(io_raddr),
+    .R0A(raddr),
     .R0E(io_ren),
     .R0O(T0)
   );
+  assign T1 = io_raddr;
 
   always @(posedge clk) begin
     if(io_ren) begin
-      raddr <= io_raddr;
+      raddr <= T1;
     end
   end
 endmodule
@@ -852,8 +856,8 @@ endmodule
       io.ctrl_out := dpath.io.ctrl_out
     }
 
-    chiselMain(Array[String]("--backend", "c", "--vcd",
-      "--targetDir", tmpdir.getRoot().toString()),
+    chiselMain(Array[String]("--backend", "c", "--vcd"),
+//      "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new DebugComp))
     assertFile(tmpdir.getRoot() + "/NameSuite_DebugComp_1.h",
 """#ifndef __NameSuite_DebugComp_1__

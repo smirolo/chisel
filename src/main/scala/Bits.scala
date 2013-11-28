@@ -101,7 +101,8 @@ abstract class Bits extends Data {
     and returns the width of this node.
   */
   def getWidth(): Int = {
-    GraphWalker.tarjan(node :: Nil, {node => node.inferWidth.forward(node)})
+    val inferWF = new InferWidthForward
+    GraphWalker.tarjan(node :: Nil, inferWF)
     node.width
   }
 
@@ -123,46 +124,64 @@ abstract class Bits extends Data {
         }
         read
       }
+      case vecref: VecReference[_] => {
+        VecMux(vecref.addr, vecref.elts).toBits.node
+      }
       case iob: IOBound =>
-        if( Module.scope.compStack.isEmpty
-          || iob.component == Module.scope.compStack.top )
-          iob
-        else {
+        if( iob.isDirected(OUTPUT)
+          && !Module.scope.compStack.isEmpty
+          && iob.component != Module.scope.compStack.top ) {
+          /* We are using an output of a child module, we thus
+           need to make an intermediate variable holder here. */
           if( cachedLValue == null ) {
-            cachedLValue = new IOBound(
-              if( iob.dir == INPUT ) OUTPUT
-              else if( iob.dir == OUTPUT ) INPUT
-              else NODIRECTION,
-              -1,
-              iob)
+            cachedLValue = new IOBound(INPUT, -1, iob)
           }
           cachedLValue
+        } else {
+          iob
         }
-      case _ => node
+        case _ => node
     }
   }
 
   /** Assign and returns the rvalue associated with the node */
-  def rvalue( value: Node ): Node = {
+  def rvalue( value: Node ) = {
     node match {
       case memref: MemReference =>
         val write = new MemWrite(memref.mem, memref.addr,
           value, Module.scope.genCond())
-        write
+
+      case vecref: VecReference[_] => {
+        val onehot = VecUIntToOH(vecref.addr, vecref.elts.length)
+        Module.searchAndMap = true
+        for( (elem , i) <- vecref.elts.zipWithIndex ) {
+          when( Vec.getEnable(onehot, i) ) {
+            elem := UInt(value)
+          }
+        }
+        Module.searchAndMap = false
+      }
       case regd: RegDelay =>
         if( regd.inputs.length > regd.CLOCK_NEXT ) {
           regd.inputs(regd.CLOCK_NEXT) = value
         } else {
           regd.inputs.append(value)
         }
-        regd
       case iob: IOBound =>
         iob.inputs.clear()
         iob.inputs.append(value)
-        iob
+/* XXX
+        iob.inputs.append(
+          if( iob.component != Module.scope.compStack.top
+            && value.component != Module.scope.compStack.top ) {
+            /* Intermediate node when connecting siblings */
+            new IOBound(BOTHDIRECTION, -1, value)
+          } else {
+            value
+          })
+ */
       case node =>
         ChiselError.error("cannot assign to wire net")
-        node
     }
   }
 
@@ -218,17 +237,13 @@ abstract class Bits extends Data {
   override def toBits(): UInt = UInt(this.node)
 
   override def toString: String = {
-    // XXX We cannot print the width here as it would computed the infered
-    // width, hence change the computations. It might be possible to print
-    // width_ but it seems to also have some underlying computations associated
-    // to it.
     var str = (
       "/*" + (if (name != null && !name.isEmpty) name else "?")
         + (if (component != null) (" in " + component) else "") + "*/ "
         + getClass.getName + "("
         + "node=" + node
-        + ", width=" + node.width)
-    str = str + "))"
+        + (if( node != null) (", width=" + node.width) else ""))
+    str = str + ")"
     str
   }
 
@@ -288,7 +303,8 @@ abstract class Bits extends Data {
                 ChiselError.error("matching parent against child/cousin with different directions.")
               }
             }
-            case _ => ChiselError.error("<> matching against " + right.node.getClass.getName)
+            case _ =>
+              parent := cousin
           }
       }
     } else {
@@ -304,7 +320,8 @@ abstract class Bits extends Data {
                 ChiselError.error("matching sibblings with same directions.")
               }
             }
-            case _ => ChiselError.error("<> matching against " + right.node.getClass.getName)
+            case _ =>
+              this := right
           }
       }
     }
@@ -312,18 +329,9 @@ abstract class Bits extends Data {
 
   override def clone: this.type = {
     val res = this.getClass.newInstance.asInstanceOf[this.type];
-    res.node = this.node;
+    res.node = new IOBound(NODIRECTION, this.getWidth)
     res
   }
-
-/*
-
-  override def forceMatchingWidths {
-    if(inputs.length == 1 && inputs(0).width != width) {
-      inputs(0) = inputs(0).matchWidth(width)
-    }
-  }
- */
 
   /** Assignment operator.
 
@@ -427,13 +435,6 @@ object Extract {
   def apply(opand: Bits, hi: Bits, lo: Bits): UInt = {
     UInt(
       if( opand.isConst && hi.isConst && lo.isConst ) {
-        /* XXX Original code sets output width to input width,
-         for no apparent reason?
-        val w = if (opand.node.width == -1) (
-          hi.node.asInstanceOf[Literal].value.toInt
-            - lo.node.asInstanceOf[Literal].value.toInt + 1)
-                else opand.node.width;
-         */
         val w = (hi.node.asInstanceOf[Literal].value.toInt
             - lo.node.asInstanceOf[Literal].value.toInt + 1)
         Literal((opand.node.asInstanceOf[Literal].value
@@ -448,7 +449,8 @@ object Extract {
           new LeftShiftOp(Literal(1), hiMinusLoPlus1), Literal(1))
         new AndOp(rsh, mask)
       } else {
-        new ExtractOp(opand.lvalue(), hi.lvalue(), lo.lvalue())
+        val n = new ExtractOp(opand.lvalue(), hi.lvalue(), lo.lvalue())
+        n
       })
   }
 }

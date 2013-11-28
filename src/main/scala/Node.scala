@@ -174,7 +174,7 @@ abstract class Node extends nameable {
     var res: List[Node] = Nil;
     var off = 0;
     for ((n, io) <- b.flatten) {
-      if (io.dir == OUTPUT) {
+      if (io.isDirected(OUTPUT)) {
         val w = io.width;
         res  = Extract(UInt(this), UInt(off + w - 1), UInt(off)).node :: res;
         off += w;

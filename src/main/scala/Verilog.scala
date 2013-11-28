@@ -185,8 +185,10 @@ class VerilogBackend extends Backend {
     }
     if (c.resets.size > 0 ) {
       if (c.clocks.length > 0) res = res + ", "
+      /* The reset signal is an end-point that needs to be propagated
+       back the hierarchy to the top module. */
       res = res + (c.resets.toList).map(x => "." + emitRef(x)
-        + "(" + emitRef(x.inputs(0)) + ")").reduceLeft(_ + ", " + _)
+        + "(" + emitRef(x) + ")").reduceLeft(_ + ", " + _)
     }
     var isFirst = true;
     val portDecs = new ArrayBuffer[StringBuilder]
@@ -212,7 +214,9 @@ class VerilogBackend extends Backend {
                  to generate a warning here. */
                 portDec = "//" + portDec
               } else {
-                val consumer: Node = io.consumers.head
+                /* There could be multiple consumers. We need to to find
+                 the correct one. */
+                val consumer = io.consumers.filter(_.component != io.component).head
                 if (consumer == null) {
                   if(Module.saveConnectionWarnings) {
                     ChiselError.warning("" + io + "(" + io.component + ") OUTPUT UNCONNECTED (" + io.consumers.length + ") IN " + c.parent);
@@ -266,8 +270,10 @@ class VerilogBackend extends Backend {
             ChiselError.warning("UNCONNECTED " + node + " IN " + node.component); ""
           } else if (node.inputs(0) == null) {
             ChiselError.warning("UNCONNECTED WIRE " + node + " IN " + node.component); ""
-          } else {
+          } else if( node.component == node.inputs(0).component ) {
             "  assign " + emitTmp(node) + " = " + emitRef(node.inputs(0)) + ";\n"
+          } else {
+            ""
           }
         }
 
@@ -837,8 +843,6 @@ class VerilogBackend extends Backend {
 
     val out = createOutputFile(c.name + ".v");
     doCompile(c, out, 0);
-    verifyAllMuxes(c)
-    ChiselError.checkpoint()
     out.close();
 
     if (!memConfs.isEmpty) {

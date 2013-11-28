@@ -33,6 +33,27 @@ package Chisel
 class NotImplementedException extends Exception {
 }
 
+
+class InferWidthForward extends GraphVisitor {
+
+  var updated: Boolean = false
+
+  override def start( node: Node ): Unit = {
+    updated |= node.inferWidth.forward(node)
+  }
+}
+
+
+class InferWidthBackward extends GraphVisitor {
+
+  var updated: Boolean = false
+
+  override def start( node: Node ): Unit = {
+    updated |= node.inferWidth.backward(node)
+  }
+}
+
+
 /** Base class for width inference algorithms.
   */
 abstract class Width {
@@ -50,7 +71,6 @@ abstract class Width {
    of the graph from outputs to inputs.
    */
   def backward(node: Node): Boolean = {
-//    println("XXX [Width.backward] " + node)
     var update = false
     node match {
       case op: SymetricOpand =>
@@ -101,7 +121,6 @@ abstract class Width {
     res.component = node.component
     res.width = width
     res.inferWidth = new FixedWidth(width)
-//    println("XXX [matchWidth] done " + res + "(" + res.width + ") to " + width + " bits")
     res
   }
 
@@ -131,9 +150,12 @@ class FixedWidth(width: Int) extends Width {
 class WidthOf(index: Int, offset: Int = 0) extends Width {
 
   override def forward(node: Node): Boolean = {
-    /* IO nodes might or might not be connected. */
-    val width = (if ( node.inputs.length > index )
-      node.inputs(index).width + offset else node.width)
+    /* IO nodes might or might not be connected.
+     It is also possible a call to clone will trigger a premature
+     call to Bits.getWidth. */
+    val width = (if (node.inputs.length > index
+      && node.inputs(index) != null) node.inputs(index).width + offset
+    else node.width)
     val update = (node.width != width)
     if( update ) node.width = width
 //    println("XXX [WidthOf(" + index + "," + offset +")] " + node)

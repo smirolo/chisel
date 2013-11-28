@@ -128,7 +128,7 @@ class Scope {
     This code needs to be executed after the implicit
     clock and reset were initialized of course. */
     if( c.clock == null ) c.clock = this.clock
-    if( c._reset == null ) c._reset = this.reset
+    if( c.reset == null ) c.reset = this.reset
   }
 
   def pop() {

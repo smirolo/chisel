@@ -37,8 +37,7 @@ import scala.collection.mutable.HashSet
 class PrintNode extends GraphVisitor {
 
  private def isDottable (m: Node): Boolean = {
-    if( m == null ) false
-    else if (m == m.component.defaultResetPin) {
+    if( m == null ) {
       false
     } else {
       m match {
@@ -49,10 +48,7 @@ class PrintNode extends GraphVisitor {
   }
 
   override def start( node: Node ): Unit = {
-    println(node + " dot=" + isDottable(node))
-    for( m <- node.inputs ) {
-      println("\tdot=" + isDottable(m))
-    }
+    println(node + " inferWidth=" + node.inferWidth.toString)
   }
 
 }
@@ -67,8 +63,7 @@ class DotBackend extends Backend {
   }
 
   private def isDottable (m: Node): Boolean = {
-    if( m == null ) false
-    else if (m.component != null && m == m.component.defaultResetPin) {
+    if( m == null ) {
       false
     } else {
       m match {

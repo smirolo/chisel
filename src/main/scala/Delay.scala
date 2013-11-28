@@ -62,22 +62,30 @@ class RegDelay(clockNode: Update, nextNode: Node,
 
   val CLOCK_NEXT = 1
   val CLOCK_INIT = 2
-  val CLOCK_RESET = 3
+  val CLOCK_INIT_RESET = 4
+
+  var state = CLOCK_NEXT
 
   inferWidth = new WidthOf(1)
   this.inputs.append(nextNode)
-  if( initNode != null ) this.inputs.append(initNode)
-  if( resetNode != null ) {
-    resetNode.isReset = true
-    this.inputs.append(resetNode)
+  if( initNode != null ) {
+    this.inputs.append(initNode)
+    state = CLOCK_INIT
+    /* If there is no init/reset value, we don't bother to hook-up the reset
+     control signal. */
+    if( resetNode != null ) {
+      resetNode.isReset = true
+      this.inputs.append(resetNode)
+      state = CLOCK_INIT_RESET
+    }
   }
 
   def next: Node = this.inputs(CLOCK_NEXT)
-  def init: Node  = if( this.inputs.length > CLOCK_INIT ) this.inputs(CLOCK_INIT) else null
+  def init: Node  = if( state == CLOCK_INIT_RESET || state == CLOCK_INIT ) this.inputs(2) else null
 
-  override def reset: Node  = if( this.inputs.length > CLOCK_RESET ) this.inputs(CLOCK_RESET) else null
+  override def reset: Node  = if ( state == CLOCK_INIT_RESET ) this.inputs(3) else null
 
-  def hasReset: Boolean = (reset != null)
+  def hasReset: Boolean = (init != null)
 
   override def assigned: Node = next
 

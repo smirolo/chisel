@@ -224,7 +224,7 @@ abstract class Backend {
       case l: Literal => l.toString;
       case any       =>
         if (m.name != ""
-          && m != Module.topComponent.defaultResetPin && m.component != null) {
+          && m != Module.scope.resets.head && m.component != null) {
           /* Only modify name if it is not the reset signal
            or not in top component */
           if(m.name != "reset" && m.component != Module.topComponent) {
@@ -326,9 +326,6 @@ abstract class Backend {
       val prune = top.inputs.map(_.prune).foldLeft(true)(_ && _)
       pruneCount+= (if (prune) 1 else 0)
       top.prune = prune
-      if( prune ) {
-        println("XXX [pruneNodes] top.prune " + emitRef(top))
-      }
       for(i <- top.consumers) {
         if(!(i == null)) {
           if(!walked.contains(i)) {
@@ -360,6 +357,7 @@ abstract class Backend {
     result ++ ArrayBuffer[Module](root);
   }
 
+/* XXX
   // go through every Module and set its clock and reset field
   def assignClockAndResetToModules {
     for (module <- sortedComps.reverse) {
@@ -370,7 +368,6 @@ abstract class Backend {
     }
   }
 
-/* XXX
   def connectResets {
     for (parent <- sortedComps) {
       for (child <- parent.children) {
@@ -395,39 +392,12 @@ abstract class Backend {
   }
  */
 
-  // walk forward from root register assigning consumer clk = root.clock
-/* XXX to re-implement
-  def createClkDomain(root: Node, walked: ArrayBuffer[Node]) = {
-    val dfsStack = new Stack[Node]
-    walked += root; dfsStack.push(root)
-    val clock = root.clock
-    while(!dfsStack.isEmpty) {
-      val node = dfsStack.pop
-      for (consumer <- node.consumers) {
-        if (!consumer.isInstanceOf[Delay] && !walked.contains(consumer)) {
-          val c1 = consumer.clock
-          val c2 = clock
-          if(!(consumer.clock == null || consumer.clock == clock)) {
-            ChiselError.warning({consumer.getClass + " " + emitRef(consumer) + " " + emitDef(consumer) + "in module" +
-                                 consumer.component + " resolves to clock domain " + 
-                                 emitRef(c1) + " and " + emitRef(c2) + " traced from " + root.name})
-          } else { consumer.clock = clock }
-          walked += consumer
-          dfsStack.push(consumer)
-        }
-      }
-    }
-  }
- */
-
   def elaborate(c: Module): Unit = {
     Module.setAsTopComponent(c)
 
     /* XXX If we call nameAll here and again further down, we end-up with
      duplicate names in the generated C++.
     nameAll(c) */
-
-    Module.components.foreach(_.elaborate(0));
 
     /* XXX We should name all signals before error messages are generated
      so as to give a clue where problems are showing up but that interfers
@@ -438,52 +408,49 @@ abstract class Backend {
     // XXX c.genAllMuxes;
     // XXX verify all wires are assigned and have default values.
     transform(c, preElaborateTransforms)
-    Module.components.foreach(_.postMarkNet(0));
     ChiselError.info("// COMPILING " + c + "(" + c.children.length + ")");
 
     levelChildren(c)
     sortedComps = gatherChildren(c).sortWith(
       (x, y) => (x.level < y.level || (x.level == y.level && x.traversal < y.traversal)));
 
-/*XXX
-    assignClockAndResetToModules
-    sortedComps.map(_.addDefaultReset)
-    c.addClockAndReset
-    gatherClocksAndResets
-    connectResets
- */
-    ChiselError.info("started width inference")
-    GraphWalker.tarjan(findRoots(c), {node => node.inferWidth.forward(node)})
-    GraphWalker.tarjan(findRoots(c), {node => node.inferWidth.backward(node)})
+    /* compute necessary clocks and resets */
+    for (comp <- sortedComps ) {
+      val clks = new ByClassVisitor[Update]()
+      GraphWalker.depthFirst(findRoots(comp), clks)
+      comp.clocks = clks.items
+      val rsts = new ByClassVisitor[Delay]()
+      GraphWalker.depthFirst(findRoots(comp), rsts)
+      comp.resets.clear()
+      for( rst <- rsts.items.map(x => { x.reset }).filter(_ != null) ) {
+        rst.isIo = true
+        if( !comp.resets.contains(rst) ) comp.resets += rst
+      }
+    }
 
+    ChiselError.info("started width inference")
+    var updated = true
+    while( updated ) {
+      val inferWF = new InferWidthForward
+      GraphWalker.tarjan(findRoots(c), inferWF)
+      updated = inferWF.updated
+    }
+    val inferBW = new InferWidthBackward
+    GraphWalker.tarjan(findRoots(c), inferBW)
     ChiselError.info("finished width inference")
-    ChiselError.info("start width checking")
-//    c.forceMatchingWidths;
-    ChiselError.info("finished width checking")
-    ChiselError.info("started flattenning")
     ChiselError.checkpoint()
 
     // two transforms added in Mem.scala (referenced and computePorts)
     ChiselError.info("started transforms")
     transform(c, transforms)
     ChiselError.info("finished transforms")
+    ChiselError.checkpoint()
 
     GraphWalker.depthFirst(findRoots(c), new AddConsumersVisitor)
-
-/* XXX re-implement clockdomains.
-    val clkDomainWalkedNodes = new ArrayBuffer[Node]
-    for (comp <- sortedComps)
-      for (node <- comp.nodes)
-        if (node.isInstanceOf[RegDelay])
-            createClkDomain(node, clkDomainWalkedNodes)
- */
-    ChiselError.checkpoint()
 
     /* We execute nameAll after traceNodes because bindings would not have been
        created yet otherwise. */
     nameAll(c)
-//XXX    nameRsts
-
     for (comp <- sortedComps ) {
       // remove unconnected outputs
       pruneUnconnectedIOs(comp)
@@ -500,6 +467,8 @@ abstract class Backend {
     if(Module.saveComponentTrace) {
       printStack
     }
+    verifyAllMuxes(c)
+    ChiselError.checkpoint()
   }
 
   def compile(c: Module, flags: String = null): Unit = { }

@@ -201,11 +201,13 @@ class DataSuite extends AssertionsForJUnit {
     assertFalse( dat.named );
   }
 
-  /** The statement new Bool bypasses the width initialization resulting
-    in incorrect code dat_t<0> which leads to incorrect VCD output.
+  /** The code used to bypass the width initialization resulting
+    in incorrect code dat_t<0> which lead to incorrect VCD output.
+    This is not the case anymore.
 
-    XXX Chisel should generate an error message!
-    XXX Incorrect until we compute debug roots correctly.
+    A clock_hi and clock_lo used to be generated as well but since
+    there are no registers nor memory in this circuit this seemed
+    to be an error to so. This is fixed as well.
     */
   @Test def testBypassData() {
     class BypassData(num_bypass_ports:Int) extends Bundle() {
@@ -222,8 +224,8 @@ class DataSuite extends AssertionsForJUnit {
       debug(io.valid)
     }
 
-    chiselMain(Array[String]("--backend", "c"),
-//      "--targetDir", tmpdir.getRoot().toString()),
+    chiselMain(Array[String]("--backend", "c",
+      "--targetDir", tmpdir.getRoot().toString()),
       () => Module(new BypassDataComp))
     assertFile(tmpdir.getRoot() + "/DataSuite_BypassDataComp_1.h",
 """#ifndef __DataSuite_BypassDataComp_1__
@@ -233,13 +235,17 @@ class DataSuite extends AssertionsForJUnit {
 
 class DataSuite_BypassDataComp_1_t : public mod_t {
  public:
-  dat_t<0> DataSuite_BypassDataComp_1__io_valid;
+  dat_t<3> T0;
+  dat_t<1> DataSuite_BypassDataComp_1__io_valid_2;
+  dat_t<3> DataSuite_BypassDataComp_1__io_data;
+  dat_t<1> DataSuite_BypassDataComp_1__io_valid_1;
+  dat_t<1> DataSuite_BypassDataComp_1__io_valid_0;
   int clk;
   int clk_cnt;
 
   void init ( bool rand_init = false );
-  void clock_lo ( dat_t<1> reset );
-  void clock_hi ( dat_t<1> reset );
+  void clock_lo_clk ( dat_t<1> reset );
+  void clock_hi_clk ( dat_t<1> reset );
   int clock ( dat_t<1> reset );
   void print ( FILE* f );
   bool scan ( FILE* f );

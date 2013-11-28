@@ -99,22 +99,18 @@ rankdir = LR;
     label = "sub"
     DotBackendSuite_DAGComp_1_sub__io_valid[label="io_valid:OUTPUT"];
     DotBackendSuite_DAGComp_1_sub__stored[shape=square,label="stored:RegDelay"];
-    DotBackendSuite_DAGComp_1_sub__io_ready[label="io_ready:OUTPUT"];
-    DotBackendSuite_DAGComp_1_sub__DotBackendSuite_DAGComp_1_reset[label="DotBackendSuite_DAGComp_1_reset:OUTPUT"];
+    DotBackendSuite_DAGComp_1_sub__io_ready[label="io_ready:INPUT"];
     DotBackendSuite_DAGComp_1_sub__stored -> DotBackendSuite_DAGComp_1_sub__io_valid[label="1"];
     DotBackendSuite_DAGComp_1_sub__io_ready -> DotBackendSuite_DAGComp_1_sub__stored[label="1"];
-    DotBackendSuite_DAGComp_1_sub__DotBackendSuite_DAGComp_1_reset -> DotBackendSuite_DAGComp_1_sub__stored[label="1"];
   }
   clk -> DotBackendSuite_DAGComp_1_sub__stored[label="1"];
 T0 -> DotBackendSuite_DAGComp_1_sub__io_ready[label="1"];
-reset -> DotBackendSuite_DAGComp_1_sub__DotBackendSuite_DAGComp_1_reset[label="1"];
   io_data0[label="io_data0:INPUT"];
   io_data1[label="io_data1:INPUT"];
   io_result[label="io_result:OUTPUT"];
   sub_io_valid[label="sub_io_valid:INPUT"];
   clk[label="clk:Update"];
   T0[label="T0:AndOp"];
-  reset[label="reset:INPUT"];
   sub_io_valid -> io_result[label="1"];
   DotBackendSuite_DAGComp_1_sub__io_valid -> sub_io_valid[label="1"];
   io_data0 -> T0[label="1"];

@@ -59,6 +59,38 @@ object CString {
   }
 }
 
+
+/** Insures each node such that it has a unique name accross the whole
+  hierarchy by prefixing its name by a component path (except for "reset"
+  and all nodes in *c*). */
+class RenameNodes(topModule: Module) extends GraphVisitor {
+
+  override def start( node: Node ): Unit = {
+    node match {
+      case l: Literal => ;
+      case _         =>
+        if (node.name != "" && !(node == Module.scope.implicitReset) && !(node.component == null)) {
+          // only modify name if it is not the reset signal or not in top component
+          if(node.name != "reset" || !(node.component == topModule)) {
+            node.name = node.component.getPathName + "__" + node.name;
+          }
+        }
+    }
+  }
+
+}
+
+
+class SameClockDomain(val clock: Update) extends EdgeFilter {
+
+  override def apply(source: Node, target: Node): Boolean = {
+    ( !target.isInstanceOf[Delay]
+      || (clock == target.asInstanceOf[Delay].clock))
+  }
+
+}
+
+
 class CppBackend extends Backend {
   val keywords = new HashSet[String]();
 
@@ -73,9 +105,10 @@ class CppBackend extends Backend {
 
   override def emitRef(node: Node): String = {
     node match {
+/*XXX deprecated
       case x: IOBound =>
         emitRef(x.inputs(0))
-
+ */
       case _ =>
         super.emitRef(node)
     }
@@ -104,8 +137,6 @@ class CppBackend extends Backend {
 
   override def emitDec(node: Node): String = {
     node match {
-      case x: IOBound =>
-        ""
       case x: Literal =>
         ""
       case x: RegDelay =>
@@ -127,7 +158,9 @@ class CppBackend extends Backend {
   def words(node: Node): Int = (node.width - 1) / bpw + 1
   def fullWords(node: Node): Int = node.width/bpw
   def emitLoWordRef(node: Node): String = emitWordRef(node, 0)
+
   def emitTmpDec(node: Node): String = {
+    println("XXX [emitTmpDec] " + node + " isInObject: " + node.isInObject)
     if (!node.isInObject) {
       "  val_t " + (0 until words(node)).map(emitRef(node) + "__w" + _).reduceLeft(_ + ", " + _) + ";\n"
     } else {
@@ -181,8 +214,9 @@ class CppBackend extends Backend {
       case x: MuxOp =>
         emitTmpDec(x) +
         block(List("val_t __mask = -" + emitLoWordRef(x.inputs(0))) ++
-              (0 until words(x)).map(i => emitWordRef(x, i) + " = " + emitWordRef(x.inputs(2), i) + " ^ ((" + emitWordRef(x.inputs(2), i) + " ^ " + emitWordRef(x.inputs(1), i) + ") & __mask)"))
-
+          (0 until words(x)).map(i => if (x.inputs.length > 2) {emitWordRef(x, i) + " = " + emitWordRef(x.inputs(2), i) + " ^ ((" + emitWordRef(x.inputs(2), i) + " ^ " + emitWordRef(x.inputs(1), i) + ") & __mask)"} else {
+            emitWordRef(x, i) + " = " + emitWordRef(x.inputs(1), i)
+          }))
       case o: AddOp => {
         val res = ArrayBuffer[String]()
         res += (emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0))
@@ -225,6 +259,7 @@ class CppBackend extends Backend {
 
       case o: CatOp => {
         val lsh = o.inputs(1).width
+        emitTmpDec(o) +
         block((0 until fullWords(o.inputs(1))).map(i => emitWordRef(o, i) + " = " + emitWordRef(o.inputs(1), i)) ++
           (if (lsh % bpw != 0) List(emitWordRef(o, fullWords(o.inputs(1))) + " = " + emitWordRef(o.inputs(1), fullWords(o.inputs(1))) + " | " + emitLoWordRef(o.inputs(0)) + " << " + (lsh % bpw)) else List()) ++
           (words(o.inputs(1)) until words(o)).map(i => emitWordRef(o, i)
@@ -692,8 +727,7 @@ class CppBackend extends Backend {
     harness.write("  " + name + "_t* c = new " + name + "_t();\n");
     harness.write("  int lim = (argc > 1) ? atoi(argv[1]) : -1;\n");
     harness.write("  int period;\n")
-    val clocks = c.clocks(tree=true)
-    for (clock <- clocks) {
+    for (clock <- c.clocks) {
       if (clock.src == null) {
         harness.write("  period = atoi(read_tok(stdin).c_str());\n")
         harness.write("  c->" + emitRef(clock) + " = period;\n")
@@ -707,7 +741,7 @@ class CppBackend extends Backend {
     harness.write("  int delta = 0;\n")
     harness.write("  for(int i = 0; i < 5; i++) {\n")
     harness.write("    dat_t<1> reset = LIT<1>(1);\n")
-    if (clocks.length > 1) {
+    if (c.clocks.length > 1) {
       harness.write("    delta += c->clock(reset);\n")
     } else {
       harness.write("    c->clock_lo(reset);\n")
@@ -718,7 +752,7 @@ class CppBackend extends Backend {
     harness.write("    dat_t<1> reset = LIT<1>(0);\n");
     harness.write("    if (!c->scan(stdin)) break;\n");
     // XXX Why print is after clock_lo and dump after clock_hi?
-    if (clocks.length > 1) {
+    if (c.clocks.length > 1) {
       harness.write("    delta += c->clock(reset);\n")
       harness.write("    fprintf(stdout, \"%d\", delta);\n")
       harness.write("    fprintf(stdout, \"%s\", \" \");\n")
@@ -790,27 +824,13 @@ class CppBackend extends Backend {
     res
   }
 
-  /** Insures each node such that it has a unique name accross the whole
-    hierarchy by prefixing its name by a component path (except for "reset"
-    and all nodes in *c*). */
-  def renameNodes(c: Module, nodes: Seq[Node]) {
-    for (m <- nodes) {
-      m match {
-        case l: Literal => ;
-        case any        =>
-          if (m.name != "" && !(m == c.defaultResetPin) && !(m.component == null)) {
-            // only modify name if it is not the reset signal or not in top component
-            if(m.name != "reset" || !(m.component == c)) {
-              m.name = m.component.getPathName + "__" + m.name;
-            }
-          }
-      }
-    }
-  }
-
   override def elaborate(c: Module): Unit = {
     super.elaborate(c)
+    if( !c.clocks.contains(Module.scope.implicitClock.node) ) {
+      c.clocks += Module.scope.implicitClock.node.asInstanceOf[Update]
+    }
 
+/*
     /* We flatten all signals in the toplevel component after we had
      a change to associate node and components correctly first
      otherwise we are bound for assertions popping up left and right
@@ -818,22 +838,20 @@ class CppBackend extends Backend {
     for (cc <- Module.components) {
       if (!(cc == c)) {
         c.debugs ++= cc.debugs
-        c.nodes       ++= cc.nodes;
+        c.nodes  ++= cc.nodes;
       }
     }
-    verifyAllMuxes(c)
-    ChiselError.checkpoint()
-
+ */
     c.findOrdering(); // search from roots  -- create omods
-    renameNodes(c, c.omods);
+    GraphWalker.depthFirst(findRoots(c), new RenameNodes(c))
+
     if (Module.isReportDims) {
       val (numNodes, maxWidth, maxDepth) = c.findGraphDims();
       ChiselError.info("NUM " + numNodes + " MAX-WIDTH " + maxWidth + " MAX-DEPTH " + maxDepth);
     }
 
     val clkDomains = new HashMap[Update, (StringBuilder, StringBuilder)]
-    val clocks = c.clocks(tree=true)
-    for (clock <- clocks) {
+    for (clock <- c.clocks) {
       val clock_lo = new StringBuilder
       val clock_hi = new StringBuilder
       clkDomains += (clock -> ((clock_lo, clock_hi)))
@@ -852,14 +870,18 @@ class CppBackend extends Backend {
     out_h.write("class " + c.name + "_t : public mod_t {\n");
     out_h.write(" public:\n");
     if (Module.isTesting && Module.tester != null) {
-      Module.scanArgs.clear();  Module.scanArgs  ++= Module.tester.testInputNodes;    Module.scanFormat  = ""
-      Module.printArgs.clear(); Module.printArgs ++= Module.tester.testNonInputNodes; Module.printFormat = ""
-
+      Module.scanArgs.clear()
+      Module.scanArgs ++= Module.tester.testInputNodes
+      Module.scanFormat  = ""
+      Module.printArgs.clear()
+      Module.printArgs ++= Module.tester.testNonInputNodes
+      Module.printFormat = ""
       for (n <- Module.scanArgs ++ Module.printArgs)
         if(!c.omods.contains(n)) c.omods += n
     }
     val vcd = new VcdTrace()
-    for (m <- c.omods) {
+    for( m <- c.nodes ) {
+      println("XXX [emitDec] " + m + ", isInObject=" + m.isInObject + ", isInVCD=" + m.isInVCD)
       if(m.name != "reset") {
         if (m.isInObject) {
           out_h.write(emitDec(m));
@@ -869,12 +891,12 @@ class CppBackend extends Backend {
         }
       }
     }
-    for (clock <- clocks)
+    for (clock <- c.clocks)
       out_h.write(emitDec(clock))
 
     out_h.write("\n");
     out_h.write("  void init ( bool rand_init = false );\n");
-    for ( clock <- clocks) {
+    for ( clock <- c.clocks) {
       out_h.write("  void clock_lo" + clkName(clock) + " ( dat_t<1> reset );\n")
       out_h.write("  void clock_hi" + clkName(clock) + " ( dat_t<1> reset );\n")
     }
@@ -890,24 +912,36 @@ class CppBackend extends Backend {
     for(str <- Module.includeArgs) out_c.write("#include \"" + str + "\"\n");
     out_c.write("\n");
     out_c.write("void " + c.name + "_t::init ( bool rand_init ) {\n");
-    for (m <- c.omods) {
+    for( m <- c.nodes ) {
       out_c.write(emitInit(m));
     }
-    for (clock <- clocks)
+    for( clock <- c.clocks )
       out_c.write(emitInit(clock))
     out_c.write("}\n");
 
-/* XXX fix: re-implement
-    for (m <- c.omods) {
-      clkDomains(m.clock)._1.append(emitDefLo(m))
+    /* Clocked-state variables */
+    val stateVars = new ByClassVisitor[Delay]()
+    GraphWalker.depthFirst(findRoots(c), stateVars)
+    for( clock <- c.clocks ) {
+      val clkDomain = new ByClassVisitor[Node]()
+      val roots = stateVars.items.filter(_.clock == clock).map(
+        x => x.asInstanceOf[Node])
+      if( clock == Module.scope.implicitClock.node ) {
+        roots ++= c.io.nodes()
+        roots ++= c.debugs // no writes as they are clocked.
+      }
+      GraphWalker.depthFirst(roots, clkDomain, new SameClockDomain(clock))
+      for (m <- clkDomain.items.reverse) {
+        clkDomains(clock)._1.append(emitDefLo(m))
+      }
+      for (m <- clkDomain.items.reverse) {
+        clkDomains(clock)._2.append(emitInitHi(m))
+      }
+      for (m <- clkDomain.items.reverse) {
+        clkDomains(clock)._2.append(emitDefHi(m))
+      }
     }
-    for (m <- c.omods) {
-      clkDomains(m.clock)._2.append(emitInitHi(m))
-    }
-    for (m <- c.omods) {
-      clkDomains(m.clock)._2.append(emitDefHi(m))
-    }
- */
+
     for (clk <- clkDomains.keys) {
       clkDomains(clk)._1.append("}\n")
       clkDomains(clk)._2.append("}\n")
@@ -917,19 +951,19 @@ class CppBackend extends Backend {
 
     out_c.write("int " + c.name + "_t::clock ( dat_t<1> reset ) {\n")
     out_c.write("  uint32_t min = ((uint32_t)1<<31)-1;\n")
-    for (clock <- clocks) {
+    for (clock <- c.clocks) {
       out_c.write("  if (" + emitRef(clock) + "_cnt < min) min = " + emitRef(clock) +"_cnt;\n")
     }
-    for (clock <- clocks) {
+    for (clock <- c.clocks) {
       out_c.write("  " + emitRef(clock) + "_cnt-=min;\n")
     }
-    for (clock <- clocks) {
+    for (clock <- c.clocks) {
       out_c.write("  if (" + emitRef(clock) + "_cnt == 0) clock_lo" + clkName(clock) + "( reset );\n")
     }
-    for (clock <- clocks) {
+    for (clock <- c.clocks) {
       out_c.write("  if (" + emitRef(clock) + "_cnt == 0) clock_hi" + clkName(clock) + "( reset );\n")
     }
-    for (clock <- clocks) {
+    for (clock <- c.clocks) {
       out_c.write("  if (" + emitRef(clock) + "_cnt == 0) " + emitRef(clock) + "_cnt = " + 
                   emitRef(clock) + ";\n")
     }

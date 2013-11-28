@@ -53,19 +53,6 @@ object VecUIntToOH
   }
 }
 
-object VecMux {
-  def apply(addr: UInt, elts: Seq[Data]): Data = {
-    def doit(elts: Seq[Data], pos: Int): Data = {
-      if (elts.length == 1) {
-        elts(0)
-      } else {
-        val newElts = (0 until elts.length/2).map(i => Mux(addr(pos), elts(2*i + 1), elts(2*i)))
-        doit(newElts ++ elts.slice(elts.length/2*2, elts.length), pos + 1)
-      }
-    }
-    doit(elts, 0)
-  }
-}
 
 object Vec {
 
@@ -121,117 +108,53 @@ object Vec {
 
 }
 
-abstract class VecProc extends Node {
-  var addr: UInt = null
-  var elms: ArrayBuffer[Bits] = null
 
-  def genMuxes(default: Node) {}
+/** Reference to a location inside a *Vec*.
+  */
+class VecReference[T <: Data](val addr: UInt, val elts: Seq[T]) extends Node {
 
-  def procAssign(src: Node) {
-    val onehot = VecUIntToOH(addr, elms.length)
-    Module.searchAndMap = true
-    for(i <- 0 until elms.length){
-      when (getEnable(onehot, i)) {
-/* XXX Really what is .comp?
-        if(elms(i).comp != null) {
-          elms(i).comp procAssign src
-        } else {
-          elms(i) procAssign src
-        }
- */
-      }
-    }
-    Module.searchAndMap = false
-  }
+  inferWidth = new FixedWidth(log2Up(elts.length))
+
 }
+
 
 /* XXX should be a no-argument constructor */
 class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
     with Cloneable with BufferProxy[T] {
+
   val self = new ArrayBuffer[T]
-  val readPortCache = new HashMap[UInt, T]
+
+  /* Optimization caches */
   var sortedElementsCache: ArrayBuffer[ArrayBuffer[Data]] = null
-  var flattenedVec: Node = null
+  val readPortCache = new HashMap[UInt, T]
 
   override def items(): Seq[(Int, Data)] = {
     self.zipWithIndex.map(tuple => (tuple._2, tuple._1))
   }
 
 
-  override def apply(index: Int): T = {
-    println("XXX [Vec.apply] at " + index)
-    self(index)
-  }
+  override def apply(index: Int): T = self(index)
 
-  def apply(index: UInt): T = {
-    println("XXX [Vec.apply(Node)] at " + index)
-    self(0)
-/* XXX This should really be in the Mem
- read(index)
- */
-  }
+//  def apply(index: UInt): T = read(index)
 
-/* XXX
 
-  def sortedElements: ArrayBuffer[ArrayBuffer[Data]] = {
-    if (sortedElementsCache == null) {
-      sortedElementsCache = new ArrayBuffer[ArrayBuffer[Data]]
-
-      // create buckets for each elm in data type
-      for(i <- 0 until this(0).flatten.length)
-        sortedElementsCache += new ArrayBuffer[Data]
-
-      // fill out buckets
-      for(elm <- this) {
-        for(((n, io), i) <- elm.flatten zip elm.flatten.indices) {
-          //val bits = io.toBits
-          //bits.comp = io.comp
-          sortedElementsCache(i) += io.asInstanceOf[Data]
+  def apply(addr: UInt): T = {
+    if( !readPortCache.contains(addr) ) {
+      /* XXX We can't execute the following line unless we get rid
+       of *gen* class parameters.
+       val res = m.runtimeClass.newInstance.asInstanceOf[T] */
+      val res = gen(0).clone.asOutput
+      for( ((resName, resB), resIdx) <- res.flatten.zipWithIndex ) {
+        val seq = new ArrayBuffer[Data]
+        for( elem <- self ) {
+          seq += elem.flatten(resIdx)._2
         }
+        resB.node = new VecReference(addr, seq)
       }
+      readPortCache += (addr -> res)
     }
-    sortedElementsCache
+    readPortCache(addr)
   }
- */
-
-/*XXX
-  def read(addr: UInt): T = {
-    if(readPortCache.contains(addr)) {
-      return readPortCache(addr)
-    }
-
-    val res = this(0).clone
-    val iaddr = UInt(width=log2Up(length))
-    iaddr.inputs += addr
-    for(((n, io), sortedElm) <- res.flatten zip sortedElements) {
-// XXX what's the point of this?      io assign VecMux(iaddr, sortedElm)
-
-      // setup the comp for writes
-      val io_comp = new VecProc()
-      io_comp.addr = iaddr
-      io_comp.elms = sortedElm.asInstanceOf[ArrayBuffer[Bits]] // XXX ?
-      // XXX io.comp = io_comp
-    }
-    readPortCache += (addr -> res)
-    res
-  }
- */
-
-/*XXX
-  def write(addr: UInt, data: T) {
-    if(data.isInstanceOf[Node]){
-
-      val onehot = VecUIntToOH(addr, length)
-      Module.searchAndMap = true
-      for(i <- 0 until length){
-        when (getEnable(onehot, i)) {
-          this(i).comp procAssign data.toNode
-        }
-      }
-      Module.searchAndMap = false
-    }
-  }
- */
 
   override def flatten: Array[(String, Bits)] = {
     val res = new ArrayBuffer[(String, Bits)]
@@ -244,6 +167,8 @@ class Vec[T <: Data](val gen: (Int) => T) extends AggregateData[Int]
     // XXX implement correctly
     this
   }
+
+  override def length: Int = self.size
 
   override def <>(src: Data) {
     src match {
