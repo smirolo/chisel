@@ -160,7 +160,6 @@ class CppBackend extends Backend {
   def emitLoWordRef(node: Node): String = emitWordRef(node, 0)
 
   def emitTmpDec(node: Node): String = {
-    println("XXX [emitTmpDec] " + node + " isInObject: " + node.isInObject)
     if (!node.isInObject) {
       "  val_t " + (0 until words(node)).map(emitRef(node) + "__w" + _).reduceLeft(_ + ", " + _) + ";\n"
     } else {
@@ -625,7 +624,7 @@ class CppBackend extends Backend {
           + i + ")"))
 
       case reg: RegDelay =>
-        def updateData(w: Int): String = if (reg.isReset) "TERNARY(" + emitLoWordRef(reg.inputs.last) + ", " + emitWordRef(reg.init, w) + ", " + emitWordRef(reg.next, w) + ")" else emitWordRef(reg.next, w)
+        def updateData(w: Int): String = if (reg.hasReset) "TERNARY(" + emitLoWordRef(reg.reset) + ", " + emitWordRef(reg.init, w) + ", " + emitWordRef(reg.next, w) + ")" else emitWordRef(reg.next, w)
 
         def shadow(w: Int): String = emitRef(reg) + "_shadow.values[" + w + "]"
         block((0 until words(reg)).map(i => shadow(i) + " = " + updateData(i)))
@@ -648,6 +647,9 @@ class CppBackend extends Backend {
           + s.args.map(emitRef _).foldLeft(CString(s.format))(_ + ", " + _)
           + ");\n"
           + "#endif\n")
+
+      case lit: Literal =>
+        ""
 
       case x: Node =>
         if (x.isInObject && x.inputs.length == 1) {
@@ -877,11 +879,13 @@ class CppBackend extends Backend {
       Module.printArgs ++= Module.tester.testNonInputNodes
       Module.printFormat = ""
       for (n <- Module.scanArgs ++ Module.printArgs)
-        if(!c.omods.contains(n)) c.omods += n
+        if(!c.nodes.contains(n)) c.nodes += n
     }
     val vcd = new VcdTrace()
-    for( m <- c.nodes ) {
-      println("XXX [emitDec] " + m + ", isInObject=" + m.isInObject + ", isInVCD=" + m.isInVCD)
+    val agg = new Reachable()
+    GraphWalker.depthFirst(findRoots(c), agg)
+    for( m <- agg.nodes ) {
+//XXX      println("XXX [emitDec] " + m + ", isInObject=" + m.isInObject + ", isInVCD=" + m.isInVCD)
       if(m.name != "reset") {
         if (m.isInObject) {
           out_h.write(emitDec(m));
@@ -912,7 +916,7 @@ class CppBackend extends Backend {
     for(str <- Module.includeArgs) out_c.write("#include \"" + str + "\"\n");
     out_c.write("\n");
     out_c.write("void " + c.name + "_t::init ( bool rand_init ) {\n");
-    for( m <- c.nodes ) {
+    for( m <- agg.nodes ) {
       out_c.write(emitInit(m));
     }
     for( clock <- c.clocks )

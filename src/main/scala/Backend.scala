@@ -455,7 +455,6 @@ abstract class Backend {
       // remove unconnected outputs
       pruneUnconnectedIOs(comp)
     }
-
     ChiselError.checkpoint()
 
     if(!Module.dontFindCombLoop) {

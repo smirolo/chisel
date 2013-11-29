@@ -77,8 +77,8 @@ class VcdTrace extends Backend {
 
   def dumpVCDScope(c: Module, file: java.io.FileWriter, top: Module, names: HashMap[Node, String]): Unit = {
     file.write("    fprintf(f, \"" + "$scope module " + c.name + " $end" + "\\n\");\n");
-    for (mod <- top.omods) {
-      if (mod.component == c && mod.isInVCD) {
+    for( mod <- c.nodes ) {
+      if( mod.isInVCD) {
         file.write("    fprintf(f, \"$var wire " + mod.width + " " + names(mod) + " " + top.stripComponent(emitRef(mod)) + " $end\\n\");\n");
       }
     }
@@ -91,7 +91,9 @@ class VcdTrace extends Backend {
   def dumpVCD(c: Module, file: java.io.FileWriter): Unit = {
     var num = 0;
     val names = new HashMap[Node, String];
-    for (mod <- c.omods) {
+    val agg = new Reachable()
+    GraphWalker.depthFirst(findRoots(c), agg)
+    for (mod <- agg.nodes) {
       if (mod.isInVCD) {
         names(mod) = "N" + num;
         num += 1;
@@ -107,7 +109,7 @@ class VcdTrace extends Backend {
       file.write("    fprintf(f, \"$end\\n\");\n");
       file.write("  }\n");
       file.write("  fprintf(f, \"#%d\\n\", t);\n");
-      for (mod <- c.omods) {
+      for (mod <- agg.nodes) {
         if (mod.isInVCD && mod.name != "reset") {
           file.write(emitDef(mod, names(mod)));
         }

@@ -317,7 +317,8 @@ abstract class Bits extends Data {
               } else if (leftBond.isDirected(OUTPUT) && rightBond.isDirected(INPUT) ) {
                 right := this
               } else {
-                ChiselError.error("matching sibblings with same directions.")
+//XXX                ChiselError.error("matching sibblings " + leftBond + " and " + rightBond + " with same directions.")
+                this := right
               }
             }
             case _ =>

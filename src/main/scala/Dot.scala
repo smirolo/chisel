@@ -211,8 +211,9 @@ class DotBackend extends Backend {
       {println("length:" + innercrossings.length + ", " + innercrossings)})
     out_d.write("}");
     out_d.close();
-
+/*XXX
     println("XXX All Reachable Nodes:")
     GraphWalker.depthFirst(findRoots(c), new PrintNode)
+ */
   }
 }

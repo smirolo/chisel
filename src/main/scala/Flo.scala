@@ -130,17 +130,11 @@ class FloBackend extends Backend {
   override def elaborate(c: Module): Unit = {
     super.elaborate(c)
 
-    for (cc <- Module.components) {
-      if (!(cc == c)) {
-        c.nodes       ++= cc.nodes;
-        c.debugs     ++= cc.debugs;
-      }
-    }
-    verifyAllMuxes(c)
-    ChiselError.checkpoint()
-
     c.findOrdering(); // search from roots  -- create omods
-    renameNodes(c, c.omods);
+    GraphWalker.depthFirst(findRoots(c), new RenameNodes(c))
+    val agg = new Reachable()
+    GraphWalker.depthFirst(findRoots(c), agg)
+
     if (Module.isReportDims) {
       val (numNodes, maxWidth, maxDepth) = c.findGraphDims();
       ChiselError.info("NUM " + numNodes + " MAX-WIDTH " + maxWidth + " MAX-DEPTH " + maxDepth);
@@ -148,7 +142,7 @@ class FloBackend extends Backend {
 
     // Write the generated code to the output file
     val out = createOutputFile(c.name + ".flo");
-    for (m <- c.omods)
+    for (m <- agg.nodes)
       out.write(emit(m));
     out.close();
   }

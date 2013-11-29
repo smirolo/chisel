@@ -980,29 +980,37 @@ endmodule
       () => Module(new PipeComp()))
     assertFile(tmpdir.getRoot() + "/StdlibSuite_PipeComp_1.v",
 """module StdlibSuite_PipeComp_1(input clk, input reset,
-    input  io_enq_valid,
+    input io_enq_valid,
     input [7:0] io_enq_bits,
     output io_deq_valid,
-    output[7:0] io_deq_bits
+    output [7:0] io_deq_bits
 );
 
-  reg[7:0] R0;
-  reg[0:0] R1;
-  reg[7:0] R2;
-  reg[0:0] R3;
+  wire T0;
+  reg R1;
+  reg R2;
+  wire [7:0] T3;
+  reg [7:0] R4;
+  wire [7:0] T5;
+  reg [7:0] R6;
+  wire [7:0] T7;
 
-  assign io_deq_bits = R0;
-  assign io_deq_valid = R3;
+  assign io_deq_valid = T0;
+  assign T0 = R1;
+  assign io_deq_bits = T3;
+  assign T3 = R4;
+  assign T5 = R6;
+  assign T7 = io_enq_bits;
 
   always @(posedge clk) begin
-    if(R1) begin
-      R0 <= R2;
+    R1 <= reset ? 1'h0/* 0*/ : R2;
+    R2 <= reset ? 1'h0/* 0*/ : io_enq_valid;
+    if(R2) begin
+      R4 <= T5;
     end
-    R1 <= reset ? 1'h0/* 0*/ : io_enq_valid;
     if(io_enq_valid) begin
-      R2 <= io_enq_bits;
+      R6 <= T7;
     end
-    R3 <= reset ? 1'h0/* 0*/ : R1;
   end
 endmodule
 
