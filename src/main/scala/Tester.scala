@@ -39,18 +39,21 @@ import java.io.PrintStream
 import scala.sys.process._
 import Literal._
 
-class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
+class Tester[+T <: Module](val c: T, val testNodes: Array[Data]) {
   var testIn: InputStream = null
   var testOut: OutputStream = null
-  var testInputNodes: Array[Node] = null
-  var testNonInputNodes: Array[Node] = null
+  var testInputNodes: Array[Bits] = null
+  var testNonInputNodes: Array[Bits] = null
   var delta = 0
   var first = true
-  def splitFlattenNodes(args: Seq[Node]): (Seq[Node], Seq[Node]) = {
+  def splitFlattenNodes(args: Seq[Data]): (Seq[Bits], Seq[Bits]) = {
     if (args.length == 0) {
-      (Array[Node](), Array[Node]())
+      (Array[Bits](), Array[Bits]())
     } else {
-      val testNodes = args
+      val testNodes = new ArrayBuffer[Bits]
+      for( arg <- args ) {
+        testNodes ++= arg.flatten.map(_._2)
+      }
       (c.keepInputs(testNodes), c.removeInputs(testNodes))
     }
   }
@@ -69,8 +72,8 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
     testOut.flush()
   }
 
-  def step(svars: HashMap[Node, Node],
-           ovars: HashMap[Node, Node] = new HashMap[Node, Node],
+  def step(svars: HashMap[Bits, Bits],
+           ovars: HashMap[Bits, Bits] = new HashMap[Bits, Bits],
            isTrace: Boolean = true): Boolean = {
     if (isTrace) {
         println("---")
@@ -78,9 +81,9 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
     }
     for (n <- testInputNodes) {
       val v = svars.getOrElse(n, null)
-      val i = if (v == null) BigInt(0) else v.asInstanceOf[Literal].value // TODO: WARN
+      val i = if (v == null) BigInt(0) else v.node.asInstanceOf[Literal].value // TODO: WARN
       val s = i.toString(16)
-      if (isTrace) println("  " + n + " = " + i)
+      if (isTrace) println("  " + n.node.name + " = " + i)
       for (c <- s) {
         testOut.write(c)
       }
@@ -112,12 +115,12 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
       }
       val s = sb.toString
       val rv = toLitVal(s)
-      if (isTrace) println("  READ " + o + " = " + rv)
+      if (isTrace) println("  READ " + o.node.name + " = " + rv)
       if (!svars.contains(o)) {
-        ovars(o) = Literal(rv)
+        ovars(o) = UInt(rv.toInt)
       } else {
-        val tv = svars(o).asInstanceOf[Literal].value
-        if (isTrace) println("  EXPECTED: " + o + " = " + tv)
+        val tv = svars(o).node.asInstanceOf[Literal].value
+        if (isTrace) println("  EXPECTED: " + o.node.name + " = " + tv)
         if (tv != rv) {
           isSame = false
           if (isTrace) println("  *** FAILURE ***")
@@ -131,7 +134,8 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
   def startTest: Process = {
     val cmd = Module.targetDir + "/" + c.name + (if(Module.backend.isInstanceOf[VerilogBackend]) " -q" else "")
     val process = Process(cmd)
-    val pio = new ProcessIO(in => testOut = in, out => testIn = out, err => err.close())
+    val pio = new ProcessIO(in => testOut = in, out => testIn = out,
+      stderr => scala.io.Source.fromInputStream(stderr).getLines.foreach(println))
     val p = process.run(pio)
     println("STARTING " + cmd)
     p
@@ -156,7 +160,7 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Node]) {
     res
   }
   var tests: () => Boolean = () => { println("DEFAULT TESTS"); true }
-  var testVars: Array[Node] = null
+  var testVars: Array[Data] = null
   def defTests(body: => Boolean) {
     val (ins, outs) = splitFlattenNodes(testNodes)
     testInputNodes = ins.toArray; testNonInputNodes = outs.toArray

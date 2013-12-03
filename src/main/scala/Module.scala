@@ -660,10 +660,10 @@ abstract class Module(var clock: Clock = null, var reset: Bool = null) {
 
   def isInput(node: Node): Boolean =
     node match { case b:IOBound => b.isDirected(INPUT); case o => false }
-  def keepInputs(nodes: Seq[Node]): Seq[Node] =
-    nodes.filter(isInput)
-  def removeInputs(nodes: Seq[Node]): Seq[Node] =
-    nodes.filter(n => !isInput(n))
+  def keepInputs(nodes: Seq[Bits]): Seq[Bits] =
+    nodes.filter(n => isInput(n.node))
+  def removeInputs(nodes: Seq[Bits]): Seq[Bits] =
+    nodes.filter(n => !isInput(n.node))
 
 }
 

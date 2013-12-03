@@ -195,13 +195,14 @@ class CppBackend extends Backend {
   }
 
   def emitLogicalOpDef(op: Op): String = {
+    emitTmpDec(op) +
     (block((0 until words(op)).map(
       i => emitWordRef(op, i) + " = " + emitWordRef(op.inputs(0), i)
-        + op.name + emitWordRef(op.inputs(1), i))))
+        + op.opInfix + emitWordRef(op.inputs(1), i))))
   }
 
   def emitOrderOpDef(o: Op): String = {
-    val initial = (a: String, b: String) => a + o.name + b
+    val initial = (a: String, b: String) => a + o.opInfix + b
     val subsequent = (i: String, a: String, b: String) => ("(" + i + ") & "
       + a + " == " + b + " || " + a + o.slug(0) + b)
     val cond = opFoldLeft(o, initial, subsequent)
@@ -219,16 +220,16 @@ class CppBackend extends Backend {
       case o: AddOp => {
         val res = ArrayBuffer[String]()
         res += (emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0))
-          + o.name + emitLoWordRef(o.inputs(1)))
+          + o.opInfix + emitLoWordRef(o.inputs(1)))
         for (i <- 1 until words(o)) {
           var carry = (emitWordRef(o.inputs(0), i-1)
-            + o.name + emitWordRef(o.inputs(1), i-1))
+            + o.opInfix + emitWordRef(o.inputs(1), i-1))
           carry += (" < " + emitWordRef(o.inputs(0), i-1)
             + (if (i > 1) " || " + emitWordRef(o, i-1) + " < __c" else ""))
           res += (if (i == 1) "val_t " else "") + "__c = " + carry
           res += (emitWordRef(o, i) + " = "
             + emitWordRef(o.inputs(0), i)
-            + o.name + emitWordRef(o.inputs(1), i) + o.name + "__c")
+            + o.opInfix + emitWordRef(o.inputs(1), i) + o.opInfix + "__c")
         }
         block(res) + trunc(o)
       }
@@ -236,17 +237,17 @@ class CppBackend extends Backend {
       case o: SubOp => {
         val res = ArrayBuffer[String]()
         res += (emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0))
-          + o.name + emitLoWordRef(o.inputs(1)))
+          + o.opInfix + emitLoWordRef(o.inputs(1)))
         for (i <- 1 until words(o)) {
           var carry = (emitWordRef(o.inputs(0), i-1)
-            + o.name + emitWordRef(o.inputs(1), i-1))
+            + o.opInfix + emitWordRef(o.inputs(1), i-1))
           carry += (" > " + emitWordRef(o.inputs(0), i-1)
             + (if (i > 1) " || " + carry + " < " + emitWordRef(o, i-1)
             else ""))
           res += (if (i == 1) "val_t " else "") + "__c = " + carry
           res += (emitWordRef(o, i) + " = "
             + emitWordRef(o.inputs(0), i)
-            + o.name + emitWordRef(o.inputs(1), i) + o.name + "__c")
+            + o.opInfix + emitWordRef(o.inputs(1), i) + o.opInfix + "__c")
         }
         block(res) + trunc(o)
       }
@@ -729,11 +730,13 @@ class CppBackend extends Backend {
     harness.write("  " + name + "_t* c = new " + name + "_t();\n");
     harness.write("  int lim = (argc > 1) ? atoi(argv[1]) : -1;\n");
     harness.write("  int period;\n")
-    for (clock <- c.clocks) {
-      if (clock.src == null) {
-        harness.write("  period = atoi(read_tok(stdin).c_str());\n")
-        harness.write("  c->" + emitRef(clock) + " = period;\n")
-        harness.write("  c->" + emitRef(clock) + "_cnt = period;\n")
+    if( c.clocks.length > 1 ) {
+      for (clock <- c.clocks) {
+        if (clock.src == null) {
+          harness.write("  period = atoi(read_tok(stdin).c_str());\n")
+          harness.write("  c->" + emitRef(clock) + " = period;\n")
+          harness.write("  c->" + emitRef(clock) + "_cnt = period;\n")
+        }
       }
     }
     harness.write("  c->init();\n");
@@ -743,31 +746,21 @@ class CppBackend extends Backend {
     harness.write("  int delta = 0;\n")
     harness.write("  for(int i = 0; i < 5; i++) {\n")
     harness.write("    dat_t<1> reset = LIT<1>(1);\n")
-    if (c.clocks.length > 1) {
-      harness.write("    delta += c->clock(reset);\n")
-    } else {
-      harness.write("    c->clock_lo(reset);\n")
-      harness.write("    c->clock_hi(reset);\n")
-    }
+    harness.write("    delta += c->clock(reset);\n")
     harness.write("  }\n")
     harness.write("  for (int t = 0; lim < 0 || t < lim; t++) {\n");
     harness.write("    dat_t<1> reset = LIT<1>(0);\n");
     harness.write("    if (!c->scan(stdin)) break;\n");
-    // XXX Why print is after clock_lo and dump after clock_hi?
-    if (c.clocks.length > 1) {
-      harness.write("    delta += c->clock(reset);\n")
+    harness.write("    delta += c->clock(reset);\n")
+    if( c.clocks.length > 1 ) {
       harness.write("    fprintf(stdout, \"%d\", delta);\n")
       harness.write("    fprintf(stdout, \"%s\", \" \");\n")
-      harness.write("    c->print(stdout);\n")
-      harness.write("    delta = 0;\n")
-    } else {
-      harness.write("    c->clock_lo(reset);\n");
-      harness.write("    c->print(stdout);\n");
-      harness.write("    c->clock_hi(reset);\n");
     }
+    harness.write("    c->print(stdout);\n")
     if (Module.isVCD) {
       harness.write("    c->dump(f, t);\n");
     }
+    harness.write("    delta = 0;\n")
     harness.write("  }\n");
     harness.write("}\n");
     harness.close();
@@ -871,21 +864,10 @@ class CppBackend extends Backend {
     out_h.write("#include \"emulator.h\"\n\n");
     out_h.write("class " + c.name + "_t : public mod_t {\n");
     out_h.write(" public:\n");
-    if (Module.isTesting && Module.tester != null) {
-      Module.scanArgs.clear()
-      Module.scanArgs ++= Module.tester.testInputNodes
-      Module.scanFormat  = ""
-      Module.printArgs.clear()
-      Module.printArgs ++= Module.tester.testNonInputNodes
-      Module.printFormat = ""
-      for (n <- Module.scanArgs ++ Module.printArgs)
-        if(!c.nodes.contains(n)) c.nodes += n
-    }
     val vcd = new VcdTrace()
     val agg = new Reachable()
     GraphWalker.depthFirst(findRoots(c), agg)
     for( m <- agg.nodes ) {
-//XXX      println("XXX [emitDec] " + m + ", isInObject=" + m.isInObject + ", isInVCD=" + m.isInVCD)
       if(m.name != "reset") {
         if (m.isInObject) {
           out_h.write(emitDec(m));
@@ -1004,25 +986,13 @@ class CppBackend extends Backend {
         + p.args.map(emitRef _).foldLeft(CString(p.format))(_ + ", " + _)
         + ");\n"
         + "#endif\n")
-    if (Module.printArgs.length > 0) {
-      val format =
-        if (Module.printFormat == "") {
-          Module.printArgs.map(a => "%x").reduceLeft((y,z) => z + " " + y)
-        } else {
-          Module.printFormat;
-        }
-      val toks = splitFormat(format);
-      var i = 0;
-      for (tok <- toks) {
-        if (tok(0) == '%') {
-          val nodes = Module.printArgs
-          for (j <- 0 until nodes.length)
-            out_c.write("  fprintf(f, \"" + (if (j > 0) " " else "") +
-                        "%s\", TO_CSTR(" + emitRef(nodes(j)) + "));\n");
-          i += 1;
-        } else {
-          out_c.write("  fprintf(f, \"%s\", \"" + tok + "\");\n");
-        }
+    if (Module.isTesting && Module.tester != null) {
+      val nodes = Module.tester.testNonInputNodes.map(n => n.node)
+      for (j <- 0 until nodes.length) {
+//        out_c.write("  fprintf(stderr, \"write " + (if (j > 0) " " else "") +
+//          "%s ...\\n\", TO_CSTR(" + emitRef(nodes(j)) + "));\n");
+        out_c.write("  fprintf(f, \"" + (if (j > 0) " " else "") +
+          "%s\", TO_CSTR(" + emitRef(nodes(j)) + "));\n");
       }
       out_c.write("  fprintf(f, \"\\n\");\n");
       out_c.write("  fflush(f);\n");
@@ -1031,26 +1001,11 @@ class CppBackend extends Backend {
     def constantArgSplit(arg: String): Array[String] = arg.split('=');
     def isConstantArg(arg: String): Boolean = constantArgSplit(arg).length == 2;
     out_c.write("bool " + c.name + "_t::scan ( FILE* f ) {\n");
-    if (Module.scanArgs.length > 0) {
-      val format =
-        if (Module.scanFormat == "") {
-          Module.scanArgs.map(a => "%x").reduceLeft((y,z) => z + y)
-        } else {
-          Module.scanFormat;
-        }
-      val toks = splitFormat(format);
-      var i = 0;
-      for (tok <- toks) {
-        if (tok(0) == '%') {
-          val nodes = c.keepInputs(Module.scanArgs)
-          for (j <- 0 until nodes.length)
-            out_c.write("  str_to_dat(read_tok(f), " + emitRef(nodes(j)) + ");\n");
-          i += 1;
-        } else {
-          out_c.write("  fscanf(f, \"%s\", \"" + tok + "\");\n");
-        }
+    if (Module.isTesting && Module.tester != null) {
+      for (node <- Module.tester.testInputNodes.map(n => n.node)) {
+            out_c.write("  str_to_dat(read_tok(f), " + emitRef(node) + ");\n");
+//            out_c.write("  fprintf(stderr, \"XXX " + emitRef(node) + "=%s\\n\", " + emitRef(node) + ".to_str().c_str());\n");
       }
-      // out_c.write("  getc(f);\n");
     }
     out_c.write("  return(!feof(f));\n");
     out_c.write("}\n");

@@ -37,17 +37,6 @@ import scala.collection.mutable.{Queue=>ScalaQueue}
 import ChiselError._
 
 
-class TestIO(val format: String, val args: Seq[Data] = null)
-
-object Scanner {
-  def apply (format: String, args: Data*): TestIO =
-    new TestIO(format, args.toList);
-}
-object Printer {
-  def apply (format: String, args: Data*): TestIO =
-    new TestIO(format, args.toList);
-}
-
 /**
   _chiselMain_ behaves as if it constructs an execution tree from
   the constructor of a sub class of Module which is passed as a parameter.
@@ -121,24 +110,12 @@ object chiselMain {
 
   def apply[T <: Module]
       (args: Array[String], gen: () => T,
-       scanner: T => TestIO = null, printer: T => TestIO = null, ftester: T => Tester[T] = null): T = {
+       ftester: T => Tester[T] = null): T = {
     Module.initChisel();
     readArgs(args)
 
     try {
       val c = gen();
-      if (scanner != null) {
-        val s = scanner(c);
-        Module.scanArgs  ++= s.args.map{ _.toBits.node };
-        for (a <- s.args) a.toBits.node.isScanArg = true
-        Module.scanFormat  = s.format;
-      }
-      if (printer != null) {
-        val p = printer(c);
-        Module.printArgs   ++= p.args.map{ _.toBits.node };
-        for(a <- p.args) a.toBits.node.isPrintArg = true
-        Module.printFormat   = p.format;
-      }
       if (ftester != null) {
         Module.tester = ftester(c)
       }
@@ -166,7 +143,7 @@ object throwException {
 
 object chiselMainTest {
   def apply[T <: Module](args: Array[String], gen: () => T)(tester: T => Tester[T]): T =
-    chiselMain(args, gen, null, null, tester)
+    chiselMain(args, gen, tester)
 }
 
 trait nameable {

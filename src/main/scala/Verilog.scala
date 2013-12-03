@@ -524,7 +524,7 @@ class VerilogBackend extends Backend {
     val printFormat = Module.printArgs.map(a => "0x%x").fold("")((y,z) => z + " " + y)
     val scanFormat = Module.scanArgs.map(a => "%x").fold("")((y,z) => z + " " + y)
     val printNodes = for (arg <- Module.printArgs) yield arg
-    val scanNodes = for (arg <- c.keepInputs(Module.scanArgs)) yield arg
+    val scanNodes = for (arg <- Module.scanArgs.filter(n => c.isInput(n))) yield arg
     harness.write("module test;\n")
     for (node <- scanNodes)
       harness.write("    reg [" + (node.width-1) + ":0] " + emitRef(node) + ";\n")
@@ -851,8 +851,13 @@ class VerilogBackend extends Backend {
       out_conf.close();
     }
     if( Module.tester != null ) {
-      Module.scanArgs.clear();  Module.scanArgs  ++= Module.tester.testInputNodes;    Module.scanFormat  = ""
-      Module.printArgs.clear(); Module.printArgs ++= Module.tester.testNonInputNodes; Module.printFormat = ""
+      Module.scanArgs.clear();
+      Module.scanArgs  ++= Module.tester.testInputNodes.map(n => n.node)
+      Module.scanFormat  = ""
+
+      Module.printArgs.clear();
+      Module.printArgs ++= Module.tester.testNonInputNodes.map(n => n.node)
+      Module.printFormat = ""
     }
     if (Module.isGenHarness) {
       genHarness(c, c.name);
