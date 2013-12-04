@@ -60,12 +60,18 @@ class Tester[+T <: Module](val c: T, val testNodes: Array[Data]) {
 
   def setClocks(clocks: HashMap[Clock, Int]) {
     println("SETTING UP CLOCKS")
-    for (clock <- Module.scope.clocks) {
-      if (clock.srcClock == null) {
-        val s = BigInt(clocks(clock)).toString(16)
-        for (c <- s)
-          testOut.write(c)
-        testOut.write(' ')
+    for (clock <- c.clocks) {
+      // Make sure we are outputting the periods in the correct order.
+      val clk_period = clocks.find({case (clk, period) => clk.node == clock})
+      clk_period foreach {
+        case (clk, period) => {
+          if(  clock.src == null ) {
+            val s = BigInt(period).toString(16)
+            for (c <- s)
+              testOut.write(c)
+            testOut.write(' ')
+          }
+        }
       }
     }
     testOut.write('\n')

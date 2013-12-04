@@ -82,6 +82,7 @@ object Reg {
             initB.lvalue(),
             reset.lvalue())
           resB.node = reg
+          resB.node.inferWidth = new WidthOf(2)
         }
       } else {
         /* both next and init are null */

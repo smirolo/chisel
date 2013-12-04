@@ -55,7 +55,7 @@ class ByClassVisitor[T <: Node](implicit m: Manifest[T]) extends GraphVisitor {
 
   val items = new ArrayBuffer[T]()
 
-  override def start( node: Node ): Unit = {
+  override def finish( node: Node ): Unit = {
     if( m.erasure.isInstance(node)
       && !items.contains(node) ) {
       items += node.asInstanceOf[T]
@@ -76,10 +76,9 @@ class AddConsumersVisitor extends GraphVisitor {
     if(node.component != null
       && !node.component.nodes.contains(node) ) node.component.nodes += node
     for ((i, off) <- node.inputs.zipWithIndex) {
-      /* By construction we should not end-up with null inputs. */
-      assert(i != null, ChiselError.error("input " + off
-        + " of " + node.inputs.length + " for node " + this + " is null"))
-      if(!i.consumers.contains(node)) {
+      /* Enable signals on registers will introduce null for init/reset
+       in case those are undefined. */
+      if( i != null && !i.consumers.contains(node)) {
         i.consumers += node;
       }
     }

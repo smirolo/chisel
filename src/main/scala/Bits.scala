@@ -161,25 +161,20 @@ abstract class Bits extends Data {
         }
         Module.searchAndMap = false
       }
-      case regd: RegDelay =>
+      case regd: RegDelay => {
         if( regd.inputs.length > regd.CLOCK_NEXT ) {
           regd.inputs(regd.CLOCK_NEXT) = value
         } else {
           regd.inputs.append(value)
         }
+        if( !Module.scope.isDefaultCond() ) {
+          val cond = Module.scope.genCond()
+          regd.setEnable(if (regd.enable != null) new LogicalOrOp(regd.enable, cond) else cond)
+        }
+      }
       case iob: IOBound =>
         iob.inputs.clear()
         iob.inputs.append(value)
-/* XXX
-        iob.inputs.append(
-          if( iob.component != Module.scope.compStack.top
-            && value.component != Module.scope.compStack.top ) {
-            /* Intermediate node when connecting siblings */
-            new IOBound(BOTHDIRECTION, -1, value)
-          } else {
-            value
-          })
- */
       case node =>
         ChiselError.error("cannot assign to wire net")
     }

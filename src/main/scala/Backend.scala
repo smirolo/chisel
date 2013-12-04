@@ -506,9 +506,36 @@ abstract class Backend {
   }
 
   def verifyAllMuxes(c: Module) {
+    val stateVars = new ByClassVisitor[Delay]()
+    GraphWalker.depthFirst(findRoots(c), stateVars)
+    for( state <- stateVars.items ) {
+      GraphWalker.depthFirst(state :: Nil,
+        new MuxDefault(state), new OnlyMuxes)
+    }
     GraphWalker.depthFirst(findRoots(c), new VerifyMuxes())
   }
 
 }
 
+class OnlyMuxes extends EdgeFilter {
 
+  override def apply( source: Node, target: Node ): Boolean = {
+    target != null && target.isInstanceOf[MuxOp]
+  }
+
+}
+
+
+class MuxDefault(val reg: Delay) extends GraphVisitor {
+
+  override def start( node: Node ): Unit = {
+    node match {
+      case mux: MuxOp =>
+        if( mux.inputs.length < 3 ) {
+          mux.inputs.append(reg)
+        }
+      case _ => {}
+    }
+  }
+
+}

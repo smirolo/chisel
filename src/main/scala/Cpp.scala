@@ -80,12 +80,27 @@ class RenameNodes(topModule: Module) extends GraphVisitor {
 
 }
 
+class ClockedInDomain(val clock: Update) extends GraphVisitor {
 
-class SameClockDomain(val clock: Update) extends EdgeFilter {
+  val items = new ArrayBuffer[Node]()
+
+  override def finish( node: Node ): Unit = {
+    if( node.isInstanceOf[StateWrite]
+      && (clock == node.asInstanceOf[StateWrite].getClock) ) {
+      if( !items.contains(node) ) {
+        items += node
+      }
+    }
+  }
+
+}
+
+
+class OnlyLogic extends EdgeFilter {
 
   override def apply(source: Node, target: Node): Boolean = {
-    ( !target.isInstanceOf[Delay]
-      || (clock == target.asInstanceOf[Delay].clock))
+    !target.isInstanceOf[Delay]
+//      || (clock == target.asInstanceOf[Delay].clock))
   }
 
 }
@@ -206,7 +221,9 @@ class CppBackend extends Backend {
     val subsequent = (i: String, a: String, b: String) => ("(" + i + ") & "
       + a + " == " + b + " || " + a + o.slug(0) + b)
     val cond = opFoldLeft(o, initial, subsequent)
-    "  " + emitLoWordRef(o) + " = " + opFoldLeft(o, initial, subsequent) + ";\n"
+    (emitTmpDec(o) +
+      "  " + emitLoWordRef(o) + " = "
+      + opFoldLeft(o, initial, subsequent) + ";\n")
   }
 
   def emitDefLo(node: Node): String = {
@@ -231,7 +248,7 @@ class CppBackend extends Backend {
             + emitWordRef(o.inputs(0), i)
             + o.opInfix + emitWordRef(o.inputs(1), i) + o.opInfix + "__c")
         }
-        block(res) + trunc(o)
+        emitTmpDec(o) + block(res) + trunc(o)
       }
 
       case o: SubOp => {
@@ -249,7 +266,7 @@ class CppBackend extends Backend {
             + emitWordRef(o.inputs(0), i)
             + o.opInfix + emitWordRef(o.inputs(1), i) + o.opInfix + "__c")
         }
-        block(res) + trunc(o)
+        emitTmpDec(o) + block(res) + trunc(o)
       }
 
       case o: BitwiseRevOp =>
@@ -278,7 +295,7 @@ class CppBackend extends Backend {
       }
 
       case o: LeftShiftOp => {
-        if (o.width <= bpw) {
+        (emitTmpDec(o) + (if (o.width <= bpw) {
           "  " + emitLoWordRef(o) + " = " + emitLoWordRef(o.inputs(0)) + " << " + emitLoWordRef(o.inputs(1)) + ";\n"
         } else {
           var shb = emitLoWordRef(o.inputs(1))
@@ -294,7 +311,7 @@ class CppBackend extends Backend {
             res += "__c = MASK(__v" + i + " >> __r, __s != 0)"
           }
           block(res) + trunc(o)
-        }
+        }))
       }
 
       case o: LogicalNegOp =>
@@ -342,7 +359,7 @@ class CppBackend extends Backend {
             else ""))) + trunc(o))
 
       case o: RightShiftOp => {
-        if (o.inputs(0).width <= bpw) {
+        (emitTmpDec(o) + (if (o.inputs(0).width <= bpw) {
           if (o.isSigned) {
             ("  " + emitLoWordRef(o) + " = (sval_t)("
               + emitLoWordRef(o.inputs(0)) + " << "
@@ -378,7 +395,7 @@ class CppBackend extends Backend {
             res += emitLoWordRef(o) + " |= MASK(__msb << ((" + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ") % " + bpw + "), " + bpw + " > " + (o.width-1) + "-" + emitLoWordRef(o.inputs(1)) + ")"
           }
           block(res) + (if (o.isSigned) trunc(o) else "")
-        }
+        }))
       }
 
       case o: EqlOp => {
@@ -390,7 +407,7 @@ class CppBackend extends Backend {
           val and = new AndOp(a, Literal(BigInt(mask, 2)))
           res.append(emitDefLo(and))
           res.append(emitDefLo(new EqlOp(and, Literal(BigInt(bits, 2)))))
-        } else if (a.isInstanceOf[Literal] != null && a.asInstanceOf[Literal].isZ) {
+        } else if (a.isInstanceOf[Literal] && a.asInstanceOf[Literal].isZ) {
           val (bits, mask, swidth) = parseLit(b.asInstanceOf[Literal].name)
           val and = new AndOp(b, Literal(BigInt(mask, 2)))
           res.append(emitDefLo(and))
@@ -401,13 +418,13 @@ class CppBackend extends Backend {
           res.append("  " + emitLoWordRef(o) + " = "
             + opFoldLeft(o, initial, subsequent) + ";\n")
         }
-        res.toString
+        emitTmpDec(o) + res.toString
       }
 
       case o: NeqOp => {
         val initial = (a: String, b: String) => a + " != " + b
         val subsequent = (i: String, a: String, b: String) => "(" + i + ") | (" + a + " != " + b + ")"
-        ("  " + emitLoWordRef(o) + " = "
+        (emitTmpDec(o) + "  " + emitLoWordRef(o) + " = "
           + opFoldLeft(o, initial, subsequent) + ";\n")
       }
 
@@ -620,6 +637,11 @@ class CppBackend extends Backend {
         ""
 
       case m: MemRead =>
+        emitTmpDec(m) + block((0 until words(m)).map(i => emitWordRef(m, i)
+          + " = " + emitRef(m.mem) + ".get(" + emitLoWordRef(m.addr) + ", "
+          + i + ")"))
+
+      case m: MemSeqRead =>
         emitTmpDec(m) + block((0 until words(m)).map(i => emitWordRef(m, i)
           + " = " + emitRef(m.mem) + ".get(" + emitLoWordRef(m.addr) + ", "
           + i + ")"))
@@ -906,24 +928,24 @@ class CppBackend extends Backend {
     out_c.write("}\n");
 
     /* Clocked-state variables */
-    val stateVars = new ByClassVisitor[Delay]()
-    GraphWalker.depthFirst(findRoots(c), stateVars)
     for( clock <- c.clocks ) {
       val clkDomain = new ByClassVisitor[Node]()
-      val roots = stateVars.items.filter(_.clock == clock).map(
-        x => x.asInstanceOf[Node])
+      val stateVars = new ClockedInDomain(clock)
+      GraphWalker.depthFirst(findRoots(c), stateVars)
+      val roots = stateVars.items
       if( clock == Module.scope.implicitClock.node ) {
-        roots ++= c.io.nodes()
+        roots ++= c.io.nodes().filter(n => n.isInstanceOf[IOBound]
+          && n.asInstanceOf[IOBound].isDirected(OUTPUT))
         roots ++= c.debugs // no writes as they are clocked.
       }
-      GraphWalker.depthFirst(roots, clkDomain, new SameClockDomain(clock))
-      for (m <- clkDomain.items.reverse) {
+      GraphWalker.depthFirst(roots, clkDomain, new OnlyLogic())
+      for (m <- clkDomain.items) {
         clkDomains(clock)._1.append(emitDefLo(m))
       }
-      for (m <- clkDomain.items.reverse) {
+      for (m <- clkDomain.items) {
         clkDomains(clock)._2.append(emitInitHi(m))
       }
-      for (m <- clkDomain.items.reverse) {
+      for (m <- clkDomain.items) {
         clkDomains(clock)._2.append(emitDefHi(m))
       }
     }

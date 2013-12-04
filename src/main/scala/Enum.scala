@@ -33,12 +33,18 @@ import Literal._
 
 object Enum {
   /** create n enum values of given type */
-  def apply[T <: UInt](nodeType: T, n: Int): List[T] = (Range(0, n, 1).map(x => (Lit(x, sizeof(n-1))))).toList;
+  def apply[T <: Bits](nodeType: T, n: Int)(implicit m: reflect.ClassTag[T]): List[T] = {
+    (Range(0, n, 1).map(x => (Lit(x, sizeof(n-1))))).toList
+  }
 
   /** create enum values of given type and names */
-  def apply[T <: UInt](nodeType: T, l: Symbol *): Map[Symbol, T] = (l.toList zip (Range(0, l.length, 1).map(x => Lit(x, sizeof(l.length-1))))).toMap;
+  def apply[T <: Bits](nodeType: T, l: Symbol *)(implicit m: reflect.ClassTag[T]): Map[Symbol, T] = {
+    (l.toList zip (Range(0, l.length, 1).map(x => Lit(x, sizeof(l.length-1))))).toMap
+  }
 
   /** create enum values of given type and names */
-  def apply[T <: UInt](nodeType: T, l: List[Symbol]): Map[Symbol, T] = (l zip (Range(0, l.length, 1).map(x => Lit(x, sizeof(l.length-1))))).toMap;
+  def apply[T <: Bits](nodeType: T, l: List[Symbol])(implicit m: reflect.ClassTag[T]): Map[Symbol, T] = {
+    (l zip (Range(0, l.length, 1).map(x => Lit(x, sizeof(l.length-1))))).toMap
+  }
 
 }

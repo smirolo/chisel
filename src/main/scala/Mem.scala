@@ -34,6 +34,22 @@ import ChiselError._
 import scala.reflect._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
+
+/** Reference to a location inside a state-holding register or sram.
+  */
+class MemReference(memN: MemDelay, addrN: Node) extends Node {
+
+  inferWidth = new FixedWidth(log2Up(memN.depth))
+
+  this.inputs.append(memN)
+  this.inputs.append(addrN)
+
+  def mem = this.inputs(0).asInstanceOf[MemDelay]
+  def addr = this.inputs(1)
+
+}
+
+
 /** *seqRead* means that if a port tries to read the same address that another
   port is writing to in the same cycle, the read data is random garbage (from
   a LFSR, which returns "1" on its first invocation).

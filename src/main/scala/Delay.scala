@@ -32,6 +32,12 @@ package Chisel
 
 import scala.collection.mutable.ArrayBuffer
 
+trait StateWrite {
+
+  def getClock: Update = null
+
+}
+
 /** posedge update signal for delays. This is a clock  */
 class Update(srci: Update = null, val mul: Int = 1, val div: Int = 1)
     extends Node {
@@ -58,7 +64,7 @@ abstract class Delay(clockNode: Update) extends Node {
 /** Storage nodes represented as registers. */
 class RegDelay(clockNode: Update, nextNode: Node,
   initNode: Node = null, resetNode: Node = null,
-  val depth: Int = 1) extends Delay(clockNode) {
+  val depth: Int = 1) extends Delay(clockNode) with StateWrite {
 
   val CLOCK_NEXT = 1
   val CLOCK_INIT = 2
@@ -89,11 +95,23 @@ class RegDelay(clockNode: Update, nextNode: Node,
 
   override def assigned: Node = next
 
+  override def getClock: Update = clock
+
+/** XXX Don't try to be smart here, use when to generate enable signal.
   def enable(): Node = {
     next match {
       case mux: MuxOp => mux.enable
       case _ => null
     }
+  }
+  */
+  def enable: Node = if ( this.inputs.length > 4 ) this.inputs(4) else null
+
+  def setEnable( n: Node ) {
+    while( this.inputs.length < 3 ) {
+      this.inputs.append(null)
+    }
+    this.inputs.append(n)
   }
 
 }
@@ -124,21 +142,6 @@ class ROMemDelay(inits: Seq[Node],
     extends MemDelay(clockNode, resetNode, depth, isInlineP) {
 
   this.inputs ++= inits
-}
-
-
-/** Reference to a location inside a state-holding register or sram.
-  */
-class MemReference(memN: MemDelay, addrN: Node) extends Node {
-
-  inferWidth = new FixedWidth(log2Up(memN.depth))
-
-  this.inputs.append(memN)
-  this.inputs.append(addrN)
-
-  def mem = this.inputs(0).asInstanceOf[MemDelay]
-  def addr = this.inputs(1)
-
 }
 
 
@@ -204,7 +207,8 @@ class MemSeqRead(mem: MemDelay, addri: Node) extends MemAccess(mem, addri) {
 /** Memory Write Port
   */
 class MemWrite(mem: MemDelay, addrN: Node, dataN: Node,
-  condN: Node, maskN: Node = null) extends MemAccess(mem, addrN) {
+  condN: Node, maskN: Node = null) extends MemAccess(mem, addrN)
+    with StateWrite {
 
   this.inputs += dataN
   this.inputs += condN
@@ -219,6 +223,8 @@ class MemWrite(mem: MemDelay, addrN: Node, dataN: Node,
   def mask = inputs(4)
 
   def isMasked: Boolean = inputs.length > 4
+
+  override def getClock: Update = mem.clock
 
 
 /* XXX deprecated
